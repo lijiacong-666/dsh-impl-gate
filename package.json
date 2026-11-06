@@ -41,6 +41,7 @@
   },
   "files": [
     "lib/index.js",
+    "checks/impl-gate.checks.json",
     "icon.svg",
     "cordis.patch.yml",
     "README.md",

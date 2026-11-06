@@ -18,6 +18,7 @@ const packed = new Set(files.map((file) => file.path))
 const required = [
   'package.json',
   'lib/index.js',
+  'checks/impl-gate.checks.json',
   'icon.svg',
   'cordis.patch.yml',
   'LICENSE',
