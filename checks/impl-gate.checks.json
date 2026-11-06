@@ -280,7 +280,7 @@
       "id": "Q4",
       "group": "Q",
       "title": "运行期不联网",
-      "mode": "manual",
+      "mode": "notrun",
       "runtime": "fast",
       "requires": [],
       "notRunReason": "NETWORK_BLOCK_UNSUPPORTED",
