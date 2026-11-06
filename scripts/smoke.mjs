@@ -1,0 +1,39 @@
+// Install a published version exactly as a user would, into a throwaway DSH
+// home, and check that it is installed and present in the merged configuration.
+//
+//   node scripts/smoke.mjs <name>@X.Y.Z [profile]                  npm
+//   node scripts/smoke.mjs github:<owner>/<name>#vX.Y.Z [profile]  GitHub release
+//   node scripts/smoke.mjs <path>/<name>-X.Y.Z.tgz [profile]          local `npm pack` output
+//
+// Always name an exact version: pnpm prefers releases older than 24 hours.
+import path from 'node:path'
+import {
+  assertInstalled,
+  assertMounted,
+  createTempHome,
+  defaultProfile,
+  prepareDsh,
+  runDsh,
+} from './dsh.mjs'
+
+const [arg, profile = defaultProfile] = process.argv.slice(2)
+// pnpm resolves a tarball path from the profile directory, not from here.
+const spec = arg?.endsWith('.tgz') ? path.resolve(arg) : arg
+if (!spec || !/[@#]|\.tgz$/.test(spec.replace(/^@/, ''))) {
+  console.error(
+    'Usage: node scripts/smoke.mjs <name>@X.Y.Z | github:<owner>/<name>#vX.Y.Z | <path>.tgz [profile]',
+  )
+  process.exit(1)
+}
+
+await prepareDsh()
+const { home, cleanup } = createTempHome()
+try {
+  const status = runDsh(home, ['plugin', '--profile', profile, 'add', spec])
+  if (status !== 0) throw new Error(`dsh plugin add ${spec} failed (${status}).`)
+  assertInstalled(home, profile)
+  assertMounted(home, profile)
+  console.log(`Smoke test passed: ${spec} is installed and configured in a fresh ${profile} profile.`)
+} finally {
+  cleanup()
+}

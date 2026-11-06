@@ -1,0 +1,99 @@
+{
+  "name": "dsh-impl-gate",
+  "version": "0.1.0",
+  "description": "Local implementation gate that turns 32 IMPL-GATE assertions into callable DSH tools for DeepSeek Harness.",
+  "icon": "./icon.svg",
+  "license": "Apache-2.0",
+  "author": "mofei",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "impl-gate",
+    "spec-graph",
+    "verification",
+    "contract",
+    "gate"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mofei/dsh-impl-gate.git"
+  },
+  "homepage": "https://github.com/mofei/dsh-impl-gate#readme",
+  "bugs": {
+    "url": "https://github.com/mofei/dsh-impl-gate/issues"
+  },
+  "template": {
+    "name": "dsh-plugin-template",
+    "author": "exoticknight",
+    "url": "https://github.com/exoticknight/dsh-plugin-template"
+  },
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": "*"
+  },
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test \"tests/*.test.mjs\"",
+    "check:package": "node scripts/check-package.mjs",
+    "check:release": "node scripts/check-release.mjs",
+    "verify": "pnpm typecheck && pnpm build && pnpm test && pnpm check:package",
+    "hooks:install": "simple-git-hooks",
+    "dev": "node scripts/dev.mjs start",
+    "dev:cli": "node scripts/dev.mjs cli",
+    "dev:install": "node scripts/dev.mjs install",
+    "dev:dsh": "node scripts/dev.mjs run",
+    "dev:clean": "node scripts/dev.mjs clean",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "node scripts/pre-commit.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "semver": "^7.8.5",
+    "simple-git-hooks": "^2.14.0",
+    "typescript": "^7.0.2"
+  },
+  "config": {
+    "dshVersion": "stable"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  }
+}

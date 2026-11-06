@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.tgz binary
+
+# Keep README images in the repository, but out of source archives.
+# `github:` installs download this archive: never export-ignore anything the
+# package `files` list needs (lib/, cordis.patch.yml, README*, LICENSE).
+docs/images/** export-ignore
