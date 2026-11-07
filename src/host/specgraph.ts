@@ -61,20 +61,46 @@ export function resolveArgv(command: string, pythonPath: string): string[] {
 }
 
 /**
- * Locates a specgraph source checkout by walking up from `start` and looking
- * for the `specgraph/__init__.py` package marker. Used only when the plugin is
- * configured without `specgraphCwd` so that `python -m specgraph` also works
- * for uninstalled source checkouts; it never imports or reads that source.
+ * Locates a specgraph source checkout by walking up from `start`. Besides the
+ * plain `<dir>/specgraph` layout it also accepts a sibling `spec-graph`
+ * checkout (`<dir>/spec-graph/specgraph`) and a nested `specgraph` repo
+ * (`<dir>/specgraph/specgraph`). Every visited ancestor is appended to
+ * `probed` — hit or miss — so a failed resolution shows where it stopped.
+ * It never imports or reads that source.
  */
-export function findSpecgraphHome(start: string): string | undefined {
+export function findSpecgraphHome(start: string, probed: string[] = []): string | undefined {
   let dir = path.resolve(start)
   for (let depth = 0; depth < 8; depth += 1) {
-    if (fs.existsSync(path.join(dir, 'specgraph', '__init__.py'))) return dir
+    const hit = specgraphPackageRoot(dir)
+    pushProbe(probed, hit === undefined ? dir : `${dir} -> hit`)
+    if (hit !== undefined) return hit
     const parent = path.dirname(dir)
     if (parent === dir) break
     dir = parent
   }
   return undefined
+}
+
+const PACKAGE_CANDIDATES = ['specgraph', path.join('spec-graph', 'specgraph'), path.join('specgraph', 'specgraph')]
+
+/** Returns the checkout root whose `specgraph/__init__.py` exists, if any. */
+function specgraphPackageRoot(dir: string): string | undefined {
+  for (const candidate of PACKAGE_CANDIDATES) {
+    const init = path.join(dir, candidate, '__init__.py')
+    if (fs.existsSync(init)) return path.dirname(path.dirname(init))
+  }
+  return undefined
+}
+
+function pushProbe(probed: string[], entry: string): void {
+  if (!probed.includes(entry)) probed.push(entry)
+}
+
+function formatProbed(probed: string[], limit = 6): string {
+  if (probed.length === 0) return 'none'
+  const shown = probed.slice(0, limit).join(', ')
+  const extra = probed.length - limit
+  return extra > 0 ? `${shown}, …(+${extra} more)` : shown
 }
 
 export function runSpecgraph(runner: RunnerOptions, args: string[]): Promise<RunOutput> {
@@ -123,11 +149,9 @@ export function resolveSpecgraphEnv(input: SpecgraphEnvInput): SpecgraphEnv {
   if (home === undefined) {
     for (const start of input.startDirs ?? []) {
       if (start === undefined || start.trim().length === 0) continue
-      probed.push(path.resolve(start))
-      const found = findSpecgraphHome(start)
+      const found = findSpecgraphHome(start, probed)
       if (found !== undefined) {
         home = found
-        probed.push(found)
         break
       }
     }
@@ -135,8 +159,9 @@ export function resolveSpecgraphEnv(input: SpecgraphEnvInput): SpecgraphEnv {
   if (home === undefined) {
     const fromEnv = baseEnv.SPECGRAPH_HOME
     if (fromEnv !== undefined && fromEnv.length > 0) {
-      probed.push(`SPECGRAPH_HOME=${fromEnv}`)
-      if (fs.existsSync(path.join(fromEnv, 'specgraph', '__init__.py'))) home = path.resolve(fromEnv)
+      const found = specgraphPackageRoot(path.resolve(fromEnv))
+      probed.push(found === undefined ? `SPECGRAPH_HOME=${fromEnv}` : `SPECGRAPH_HOME=${fromEnv} -> hit`)
+      if (found !== undefined) home = found
     }
   }
   const env: NodeJS.ProcessEnv = { ...baseEnv }
@@ -182,9 +207,7 @@ export async function preflightSpecgraph(environment: SpecgraphEnv, timeoutMs: n
   }
   throw new SpecgraphError(
     'PYTHON_ENV_MISSING',
-    `python cannot import specgraph; set PYTHONPATH to the spec-graph root or configure specgraphCwd (probed: ${
-      environment.probed.length > 0 ? environment.probed.join(', ') : 'none'
-    })`,
+    `python cannot import specgraph; set PYTHONPATH to the spec-graph root or configure specgraphCwd (probed: ${formatProbed(environment.probed)})`,
     lastError.slice(-2000),
   )
 }
