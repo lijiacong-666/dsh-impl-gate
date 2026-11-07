@@ -9,6 +9,37 @@ export interface PlanProblem {
   message: string
 }
 
+export interface PlanTypeField {
+  name: string
+  type: string
+  note?: string
+}
+
+export interface PlanType {
+  name: string
+  kind: 'object' | 'enum' | 'union' | 'external'
+  fields?: PlanTypeField[]
+  values?: string[]
+  source?: string
+  note?: string
+}
+
+export interface PlanError {
+  code: string
+  status: number
+  when: string
+  shape?: string
+}
+
+export interface PlanHttp {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  path: string
+  module: string
+  handler: string
+  req?: string
+  res: string
+}
+
 export interface Plan {
   schemaVersion: 1
   name: string
@@ -18,9 +49,16 @@ export interface Plan {
   goals: string[]
   nonGoals: string[]
   boundaries: Array<{ dependency: string; purpose: string; version?: string; fallback: string }>
-  globals: { conventions: string[]; forbidden: string[]; envKeys?: string[] }
+  globals: {
+    conventions: string[]
+    forbidden: string[]
+    envKeys?: string[]
+    fieldCase?: 'camel' | 'snake'
+    listEnvelope?: boolean
+  }
   data: Array<{
     table: string
+    owner: string
     columns: Array<{ name: string; type: string; constraints?: string[] }>
     indexes?: string[]
     notes?: string
@@ -34,8 +72,12 @@ export interface Plan {
     requires: Array<{ module: string; item: string; why?: string }>
     constraints: string[]
     files: string[]
-    acceptance: Array<{ id: string; assertion: string; test: string }>
+    acceptance: Array<{ id: string; assertion: string; test: string; covers?: string }>
   }>
+  types?: PlanType[]
+  errors?: PlanError[]
+  http?: PlanHttp[]
+  openQuestions?: string[]
   deliverables: { tree: string; files: Array<{ path: string; purpose: string }> }
 }
 
@@ -60,6 +102,10 @@ const ROOT_KEYS = new Set([
   'globals',
   'data',
   'modules',
+  'types',
+  'errors',
+  'http',
+  'openQuestions',
   'deliverables',
 ])
 const MODULE_KEYS = new Set([
@@ -77,11 +123,45 @@ const EXPOSE_KEYS = new Set(['kind', 'signature', 'note'])
 const REQUIRE_KEYS = new Set(['module', 'item', 'why'])
 const BOUNDARY_KEYS = new Set(['dependency', 'purpose', 'version', 'fallback'])
 const COLUMN_KEYS = new Set(['name', 'type', 'constraints'])
-const DATA_KEYS = new Set(['table', 'columns', 'indexes', 'notes'])
-const GLOBALS_KEYS = new Set(['conventions', 'forbidden', 'envKeys'])
+const DATA_KEYS = new Set(['table', 'owner', 'columns', 'indexes', 'notes'])
+const GLOBALS_KEYS = new Set(['conventions', 'forbidden', 'envKeys', 'fieldCase', 'listEnvelope'])
 const DELIVERABLE_KEYS = new Set(['tree', 'files'])
 const FILE_KEYS = new Set(['path', 'purpose'])
-const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test'])
+const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
+const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note'])
+const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
+const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape'])
+const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res'])
+
+const TYPE_KINDS = new Set(['object', 'enum', 'union', 'external'])
+const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+const BUILTIN_TYPES = new Set([
+  'Promise',
+  'Array',
+  'ReadonlyArray',
+  'Record',
+  'Partial',
+  'Pick',
+  'Omit',
+  'Exclude',
+  'NonNullable',
+  'Date',
+  'Error',
+  'Map',
+  'Set',
+  'Uint8Array',
+  'Buffer',
+])
+const TYPE_NAME_RE = /^[A-Z][A-Za-z0-9_]*$/
+const TYPE_REF_RE = /\b[A-Z][A-Za-z0-9_]*\b/g
+// In a signature only a type position counts: after ":", "<", "|" or ",".
+// This keeps old-style bare items such as "Db" legal (D-14) while blind-1's
+// annotated types are still reported.
+const TYPE_SLOT_REF_RE = /(?::|<|\||,)\s*([A-Z][A-Za-z0-9_]*)/g
+const HTTP_METHOD_PREFIX = /^(?:GET|POST|PUT|PATCH|DELETE)\s+/
+const ERROR_CODE_RE = /^E_[A-Z0-9_]+$/
+const ERROR_REF_RE = /\bE_[A-Z0-9_]+/g
+const HANDLER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*/
 
 type Json = Record<string, unknown>
 
@@ -225,6 +305,7 @@ function validateRequires(
 function validateModules(
   raw: unknown,
   problems: PlanProblem[],
+  goalsCount: number,
 ): Array<{ id: string; exposes: Array<{ signature: string; note?: string }>; requires: Array<{ module: string; item: string }> }> {
   const list = readNonEmptyArray(raw, '/modules', problems, 'at least one module')
   const out: Array<{
@@ -287,6 +368,15 @@ function validateModules(
       const acceptanceId = readString(item.id, pointer(itemAt, 'id'), problems)
       readString(item.assertion, pointer(itemAt, 'assertion'), problems)
       readString(item.test, pointer(itemAt, 'test'), problems)
+      if (item.covers !== undefined) {
+        const covers = item.covers
+        const match = typeof covers === 'string' ? /^G([1-9][0-9]*)$/.exec(covers) : null
+        if (match === null) {
+          problem(problems, pointer(itemAt, 'covers'), 'must be G<n> with n starting at 1')
+        } else if (Number(match[1]) > goalsCount) {
+          problem(problems, pointer(itemAt, 'covers'), `covers "${covers}" is outside goals 1..${goalsCount || 1}`)
+        }
+      }
       if (acceptanceId.length > 0) {
         const previous = acceptanceIds.get(acceptanceId)
         if (previous !== undefined) {
@@ -385,6 +475,275 @@ function findCycle(modules: Array<{ id: string; requires: Array<{ module: string
   return null
 }
 
+/** Declared types; returns their names in declaration order. */
+function validateTypes(raw: unknown, problems: PlanProblem[]): string[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    problem(problems, '/types', 'must be an array')
+    return []
+  }
+  const names: string[] = []
+  const seen = new Set<string>()
+  raw.forEach((entry, index) => {
+    const at = pointer('/types', index)
+    if (!isRecord(entry)) {
+      problem(problems, at, 'must be an object')
+      return
+    }
+    checkKnownKeys(entry, TYPE_KEYS, at, problems)
+    const name = readString(entry.name, pointer(at, 'name'), problems)
+    if (name.length > 0) {
+      if (!TYPE_NAME_RE.test(name)) problem(problems, pointer(at, 'name'), 'must be PascalCase (^[A-Z][A-Za-z0-9_]*$)')
+      if (seen.has(name)) problem(problems, pointer(at, 'name'), `duplicate type name "${name}"`)
+      seen.add(name)
+      names.push(name)
+    }
+    const kind = entry.kind
+    if (typeof kind !== 'string' || !TYPE_KINDS.has(kind)) {
+      problem(problems, pointer(at, 'kind'), 'must be one of "object", "enum", "union", "external"')
+      return
+    }
+    if (entry.note !== undefined && typeof entry.note !== 'string') {
+      problem(problems, pointer(at, 'note'), 'must be a string when present')
+    }
+    if (kind === 'object') {
+      if (entry.values !== undefined) problem(problems, pointer(at, 'values'), 'is only allowed for enum/union')
+      if (entry.source !== undefined) problem(problems, pointer(at, 'source'), 'is only allowed for external')
+      const fields = readNonEmptyArray(entry.fields, pointer(at, 'fields'), problems, 'object types need at least one field')
+      fields.forEach((field, fieldIndex) => {
+        const fieldAt = pointer(pointer(at, 'fields'), fieldIndex)
+        if (!isRecord(field)) {
+          problem(problems, fieldAt, 'must be an object')
+          return
+        }
+        checkKnownKeys(field, TYPE_FIELD_KEYS, fieldAt, problems)
+        readString(field.name, pointer(fieldAt, 'name'), problems)
+        readString(field.type, pointer(fieldAt, 'type'), problems)
+        if (field.note !== undefined && typeof field.note !== 'string') {
+          problem(problems, pointer(fieldAt, 'note'), 'must be a string when present')
+        }
+      })
+      return
+    }
+    if (entry.fields !== undefined) problem(problems, pointer(at, 'fields'), 'is only allowed for object')
+    if (kind === 'external') {
+      if (entry.values !== undefined) problem(problems, pointer(at, 'values'), 'is only allowed for enum/union')
+      readString(entry.source, pointer(at, 'source'), problems)
+      return
+    }
+    if (entry.source !== undefined) problem(problems, pointer(at, 'source'), 'is only allowed for external')
+    const values = readNonEmptyArray(entry.values, pointer(at, 'values'), problems, 'enum/union need at least one value')
+    readStringArray(values, pointer(at, 'values'), problems)
+  })
+  return names
+}
+
+/** Declared error catalog; returns the codes. */
+function validateErrors(raw: unknown, problems: PlanProblem[]): string[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    problem(problems, '/errors', 'must be an array')
+    return []
+  }
+  const codes: string[] = []
+  const seen = new Set<string>()
+  raw.forEach((entry, index) => {
+    const at = pointer('/errors', index)
+    if (!isRecord(entry)) {
+      problem(problems, at, 'must be an object')
+      return
+    }
+    checkKnownKeys(entry, ERROR_KEYS, at, problems)
+    const code = readString(entry.code, pointer(at, 'code'), problems)
+    if (code.length > 0) {
+      if (!ERROR_CODE_RE.test(code)) problem(problems, pointer(at, 'code'), 'must match ^E_[A-Z0-9_]+$')
+      if (seen.has(code)) problem(problems, pointer(at, 'code'), `duplicate error code "${code}"`)
+      seen.add(code)
+      codes.push(code)
+    }
+    if (typeof entry.status !== 'number' || !Number.isInteger(entry.status) || entry.status < 100 || entry.status > 599) {
+      problem(problems, pointer(at, 'status'), 'must be an integer HTTP status between 100 and 599')
+    }
+    readString(entry.when, pointer(at, 'when'), problems)
+    if (entry.shape !== undefined && typeof entry.shape !== 'string') {
+      problem(problems, pointer(at, 'shape'), 'must be a string when present')
+    }
+  })
+  return codes
+}
+
+/** HTTP surface: module/handler must exist, method+path are unique, paths start with "/". */
+function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>, problems: PlanProblem[]): void {
+  if (raw === undefined) return
+  if (!Array.isArray(raw)) {
+    problem(problems, '/http', 'must be an array')
+    return
+  }
+  const moduleList = Array.isArray(modulesRaw) ? modulesRaw : []
+  const seen = new Set<string>()
+  raw.forEach((entry, index) => {
+    const at = pointer('/http', index)
+    if (!isRecord(entry)) {
+      problem(problems, at, 'must be an object')
+      return
+    }
+    checkKnownKeys(entry, HTTP_KEYS, at, problems)
+    const method = entry.method
+    if (typeof method !== 'string' || !HTTP_METHODS.has(method)) {
+      problem(problems, pointer(at, 'method'), 'must be one of GET, POST, PUT, PATCH, DELETE')
+    }
+    const routePath = readString(entry.path, pointer(at, 'path'), problems)
+    if (routePath.length > 0 && !routePath.startsWith('/')) {
+      problem(problems, pointer(at, 'path'), 'must start with "/"')
+    }
+    const moduleId = readString(entry.module, pointer(at, 'module'), problems)
+    const handler = readString(entry.handler, pointer(at, 'handler'), problems)
+    if (moduleId.length > 0) {
+      const target = moduleList.find(
+        (candidate): candidate is Json => isRecord(candidate) && candidate.id === moduleId,
+      )
+      if (target === undefined) {
+        problem(problems, pointer(at, 'module'), `module "${moduleId}" does not exist`)
+      } else {
+        const exposes = Array.isArray(target.exposes) ? target.exposes : []
+        const httpExposes = exposes.filter((expose) => isRecord(expose) && expose.kind === 'http')
+        if (httpExposes.length === 0) {
+          problem(problems, pointer(at, 'module'), `module "${moduleId}" has no kind:"http" expose`)
+        } else if (handler.length > 0) {
+          const matches = httpExposes.some((expose) => {
+            const signature = isRecord(expose) && typeof expose.signature === 'string' ? expose.signature : ''
+            const leading = HANDLER_RE.exec(signature.trim())?.[0] ?? ''
+            return leading === handler
+          })
+          if (!matches) {
+            problem(
+              problems,
+              pointer(at, 'handler'),
+              `handler "${handler}" does not match the leading identifier of any kind:"http" signature of ${moduleId}`,
+            )
+          }
+        }
+      }
+    }
+    if (method !== undefined && typeof method === 'string' && routePath.length > 0) {
+      const key = `${method} ${routePath}`
+      if (seen.has(key)) problem(problems, pointer(at, 'path'), `duplicate route "${key}"`)
+      seen.add(key)
+    }
+    for (const field of ['req', 'res'] as const) {
+      const value = entry[field]
+      if (value !== undefined && (typeof value !== 'string' || value.trim().length === 0)) {
+        problem(problems, pointer(at, field), 'must be a non-empty type name')
+      } else if (typeof value === 'string' && BUILTIN_TYPES.has(value) && !typeNames.has(value)) {
+        problem(problems, pointer(at, field), `${field} type "${value}" must be declared in types`)
+      }
+    }
+    readString(entry.res, pointer(at, 'res'), problems)
+  })
+}
+
+/**
+ * Rule 1: every capitalised identifier in a signature, an http req/res or a
+ * type field must be a declared type or a built-in. Reports every unknown
+ * reference once, in first-appearance order.
+ */
+function validateTypeClosure(raw: Json, typeNames: Set<string>, problems: PlanProblem[]): void {
+  const refs: Array<{ text: string; path: string; mode: 'signature' | 'plain' }> = []
+  const modules = Array.isArray(raw.modules) ? raw.modules : []
+  modules.forEach((module, moduleIndex) => {
+    if (!isRecord(module) || !Array.isArray(module.exposes)) return
+    module.exposes.forEach((expose, exposeIndex) => {
+      if (!isRecord(expose) || typeof expose.signature !== 'string') return
+      refs.push({
+        text: expose.signature.replace(HTTP_METHOD_PREFIX, ''),
+        path: `${pointer(pointer('/modules', moduleIndex), 'exposes')}/${exposeIndex}/signature`,
+        mode: 'signature',
+      })
+    })
+  })
+  const http = Array.isArray(raw.http) ? raw.http : []
+  http.forEach((entry, index) => {
+    if (!isRecord(entry)) return
+    for (const field of ['req', 'res'] as const) {
+      if (typeof entry[field] === 'string') {
+        refs.push({ text: entry[field] as string, path: `${pointer('/http', index)}/${field}`, mode: 'plain' })
+      }
+    }
+  })
+  const types = Array.isArray(raw.types) ? raw.types : []
+  types.forEach((type, typeIndex) => {
+    if (!isRecord(type) || !Array.isArray(type.fields)) return
+    type.fields.forEach((field, fieldIndex) => {
+      if (!isRecord(field) || typeof field.type !== 'string') return
+      refs.push({
+        text: field.type,
+        path: `${pointer(pointer('/types', typeIndex), 'fields')}/${fieldIndex}/type`,
+        mode: 'plain',
+      })
+    })
+  })
+
+  const reported = new Set<string>()
+  for (const ref of refs) {
+    const pattern = ref.mode === 'signature' ? TYPE_SLOT_REF_RE : TYPE_REF_RE
+    for (const match of ref.text.matchAll(pattern)) {
+      const name = ref.mode === 'signature' ? match[1] : match[0]
+      if (name === undefined) continue
+      if (typeNames.has(name) || BUILTIN_TYPES.has(name) || reported.has(name)) continue
+      reported.add(name)
+      problem(problems, ref.path, `undefined type reference "${name}" at ${ref.path}`)
+    }
+  }
+}
+
+/** Rule 2: E_ codes mentioned by constraints or acceptance assertions must be declared. */
+function validateErrorRefs(modulesRaw: unknown, errorCodes: Set<string>, problems: PlanProblem[]): void {
+  const modules = Array.isArray(modulesRaw) ? modulesRaw : []
+  modules.forEach((module, moduleIndex) => {
+    if (!isRecord(module)) return
+    const at = pointer('/modules', moduleIndex)
+    if (Array.isArray(module.constraints)) {
+      module.constraints.forEach((constraint, index) => {
+        if (typeof constraint !== 'string') return
+        for (const match of constraint.matchAll(ERROR_REF_RE)) {
+          if (!errorCodes.has(match[0])) {
+            const path = `${pointer(at, 'constraints')}/${index}`
+            problem(problems, path, `undefined error code "${match[0]}" at ${path}`)
+          }
+        }
+      })
+    }
+    if (Array.isArray(module.acceptance)) {
+      module.acceptance.forEach((item, index) => {
+        if (!isRecord(item) || typeof item.assertion !== 'string') return
+        for (const match of item.assertion.matchAll(ERROR_REF_RE)) {
+          if (!errorCodes.has(match[0])) {
+            const path = `${pointer(pointer(at, 'acceptance'), index)}/assertion`
+            problem(problems, path, `undefined error code "${match[0]}" at ${path}`)
+          }
+        }
+      })
+    }
+  })
+}
+
+/** Rule 4: every table has exactly one existing owner module. */
+function validateTableOwners(dataRaw: unknown, modulesRaw: unknown, problems: PlanProblem[]): void {
+  if (!Array.isArray(modulesRaw)) return
+  const moduleIds = new Set(
+    modulesRaw.filter((module): module is Json => isRecord(module) && typeof module.id === 'string').map((module) => module.id as string),
+  )
+  const data = Array.isArray(dataRaw) ? dataRaw : []
+  data.forEach((entry, index) => {
+    if (!isRecord(entry)) return
+    const at = pointer('/data', index)
+    const owner = readString(entry.owner, pointer(at, 'owner'), problems)
+    if (owner.length > 0 && !moduleIds.has(owner)) {
+      problem(problems, pointer(at, 'owner'), `owner "${owner}" is not a module id`)
+    }
+  })
+}
+
 export function validatePlan(rawInput: unknown): PlanValidation {
   const problems: PlanProblem[] = []
   const raw = stripMeta(rawInput)
@@ -432,6 +791,12 @@ export function validatePlan(rawInput: unknown): PlanValidation {
     readStringArray(raw.globals.conventions, '/globals/conventions', problems)
     readStringArray(raw.globals.forbidden, '/globals/forbidden', problems)
     if (raw.globals.envKeys !== undefined) readStringArray(raw.globals.envKeys, '/globals/envKeys', problems)
+    if (raw.globals.fieldCase !== undefined && raw.globals.fieldCase !== 'camel' && raw.globals.fieldCase !== 'snake') {
+      problem(problems, '/globals/fieldCase', 'must be "camel" or "snake"')
+    }
+    if (raw.globals.listEnvelope !== undefined && typeof raw.globals.listEnvelope !== 'boolean') {
+      problem(problems, '/globals/listEnvelope', 'must be a boolean')
+    }
   }
 
   const dataList = readNonEmptyArray(raw.data, '/data', problems, 'at least one table')
@@ -466,7 +831,15 @@ export function validatePlan(rawInput: unknown): PlanValidation {
     }
   })
 
-  validateModules(raw.modules, problems)
+  validateModules(raw.modules, problems, goals.length)
+
+  const typeNames = validateTypes(raw.types, problems)
+  const errorCodes = validateErrors(raw.errors, problems)
+  validateTableOwners(raw.data, raw.modules, problems)
+  validateHttp(raw.http, raw.modules, new Set(typeNames), problems)
+  validateTypeClosure(raw, new Set(typeNames), problems)
+  validateErrorRefs(raw.modules, new Set(errorCodes), problems)
+  if (raw.openQuestions !== undefined) readStringArray(raw.openQuestions, '/openQuestions', problems)
 
   if (!isRecord(raw.deliverables)) {
     problem(problems, '/deliverables', 'must be an object')
@@ -512,8 +885,12 @@ export function emptyPlan(input: { name?: string; stack?: string }): Json {
     goals: [],
     nonGoals: [],
     boundaries: [],
-    globals: { conventions: [], forbidden: [], envKeys: [] },
+    globals: { conventions: [], forbidden: [], envKeys: [], fieldCase: 'camel', listEnvelope: false },
     data: [],
+    types: [],
+    errors: [],
+    http: [],
+    openQuestions: [],
     modules: [
       {
         id: 'M1',

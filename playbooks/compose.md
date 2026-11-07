@@ -99,7 +99,11 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `nonGoals` | 明确不做的事 | `不接企业微信` | `无` |
 | `boundaries` | 外部依赖及失败策略 | `{dependency:"postgres",purpose:"存用户",fallback:"启动失败并报错"}` | `{dependency:"db"}` |
 | `globals` | 全局约定/禁止/envKeys | `envKeys:["DATABASE_URL"]` | 省略 envKeys |
-| `data` | 表与字段，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
+| `data` | 表、字段与建表模块，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
+| `types` | 契约里用到的类型定义（可选） | `{name:"User",kind:"object",fields:[…]}` | 只写类型名不写字段 |
+| `errors` | 错误码目录（可选，但被引用就必须声明） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误"}` | 只写 `E_` 前缀 |
+| `http` | 对外路由（可选） | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair"}` | 路径不写 `/` |
+| `openQuestions` | 自己拿不准、需要人裁决的点 | `["token 是否要支持刷新"]` | 用注释代替 |
 | `modules` | 模块数组，至少 1 个 | 见下 | 没有模块 |
 | `deliverables` | 交付树与文件清单 | `{tree:"...",files:[{path,purpose}]}` | 只写 tree |
 
@@ -122,6 +126,74 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 2. **`requires[].item` 必须与对方 `exposes[].signature` 逐字相等。** 差一个空格都会在 materialize 时报 `PLAN_INVALID`，并给出 JSON Pointer。
 3. **`acceptance` 必须可执行。** 写清命令或脚本路径，例如 `{test:"pnpm test auth-api -- login"}`；不要写“已实现”。
 
+## 类型、错误码与接口面
+
+盲测的失败点几乎都在这三块：签名只写了类型名、错误码没有目录、HTTP 面没有路径与响应体。下面三段是可直接抄的最小写法。
+
+### types：把类型名变成可实现的字段表
+
+```json
+"types": [
+  { "name": "Member", "kind": "object",
+    "fields": [
+      { "name": "id", "type": "string" },
+      { "name": "wechatOpenId", "type": "string | null" }
+    ] },
+  { "name": "LoginInput", "kind": "object",
+    "fields": [
+      { "name": "account", "type": "string" },
+      { "name": "code", "type": "string" }
+    ] },
+  { "name": "TokenPair", "kind": "object",
+    "fields": [
+      { "name": "accessToken", "type": "string" },
+      { "name": "expiresAt", "type": "string" }
+    ] },
+  { "name": "Role", "kind": "enum", "values": ["admin", "member"] },
+  { "name": "Pool", "kind": "external", "source": "pg" }
+]
+```
+
+规则：`object` 必须有 `fields`；`enum`/`union` 必须有 `values`；`external` 必须写 `source`。签名里出现的每个大写标识符都要在 `types` 里，或属于内置白名单（`Promise`、`Array`、`Record`、`Date`、`Error`、`Map`、`Set`、`Buffer` 等）。
+
+### errors：先定错误体，再写状态码
+
+```json
+"errors": [
+  { "code": "E_AUTH_INVALID", "status": 401, "when": "账号不存在或验证码错误",
+    "shape": "{\"error\":{\"code\",\"message\"}}" },
+  { "code": "E_TOKEN_EXPIRED", "status": 401, "when": "accessToken 过期" },
+  { "code": "E_DB_CONNECT", "status": 500, "when": "启动时连不上数据库" }
+]
+```
+
+规则：`code` 形如 `E_[A-Z0-9_]+` 且全 plan 唯一；内部错误也写 `500`；`constraints` 与 `acceptance.assertion` 里出现的每个 `E_` 码都必须在这里声明。`shape` 取第一条作为全局错误体。
+
+### http：路由必须落到某个模块的 http 签名
+
+```json
+"http": [
+  { "method": "POST", "path": "/auth/login", "module": "M3", "handler": "login",
+    "req": "LoginInput", "res": "TokenPair" },
+  { "method": "GET", "path": "/users/:id", "module": "M2", "handler": "getUser",
+    "res": "Member" }
+]
+```
+
+规则：`module` 必须存在且该模块有 `kind:"http"` 的 expose；`handler` 必须等于该签名开头的标识符；`req`/`res` 必须是 `types` 里声明过的类型；同一 `method+path` 只能出现一次。
+
+### 表归属
+
+每张表都要写 `owner`（建表模块 id），且该模块的文件白名单里应有 migration 文件：
+
+```json
+{ "table": "members", "owner": "M2", "columns": [ … ] }
+```
+
+```json
+"files": ["user-service/migrations/001_members.sql", "user-service/member.ts"]
+```
+
 ## 怎么判断 SPEC.md 够不够
 
 逐条打勾，任何一条不过就回 plan 改，不要改 SPEC.md：
@@ -136,6 +208,11 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 8. `boundaries` 写的是外部依赖，不是内部模块。
 9. `nonGoals` 明确写了不做的事，避免范围蔓延。
 10. `deliverables.tree` 与 `files` 能对上每个模块的白名单。
+11. 签名里出现的每个类型都在 `types` 里；`kind:"external"` 的写了 `source`。
+12. 每张表都有 `owner`，且该模块的白名单里有 migration 文件。
+13. 每个 `E_` 码都在 `errors` 里；同一状态码不对应两个语义相同的码。
+14. 需要“整批原子”的操作，其签名能拿到事务句柄，或该模块自己拥有写入权。
+15. `http` 面覆盖所有对外路由，响应体形状与 `errors[].shape` 一致。
 
 ## 怎么分发
 

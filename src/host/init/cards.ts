@@ -1,6 +1,7 @@
 // G3: deterministic per-module task cards built only from compose-plan.json.
 // No timestamps, no ordering that depends on the filesystem, no invented content.
 import type { Plan } from '../compose/plan.js'
+import { renderTypeBlock, typesUsedBy } from '../compose/type-doc.js'
 import type { Wave, WaveOverlap } from './waves.js'
 
 type Module = Plan['modules'][number]
@@ -76,6 +77,13 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
     lines.push('每条一行，签名必须与文本完全一致（下游按此调用）：', '')
     for (const expose of module.exposes) lines.push(`- \`${expose.signature}\``)
   }
+  const relatedTypes = typesUsedBy(plan.types ?? [], module.exposes.map((expose) => expose.signature))
+  lines.push('', '### 3.1 相关类型', '')
+  if (relatedTypes.length === 0) {
+    lines.push(NONE)
+  } else {
+    for (const type of relatedTypes) lines.push(...renderTypeBlock(type), '')
+  }
   lines.push('', '## 4 你依赖的契约', '')
   if (module.requires.length === 0) {
     lines.push(NONE, '', '本模块可独立开工。')
@@ -86,6 +94,14 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
       const from = provider === undefined ? need.module : `${provider.id}/${provider.dir}`
       lines.push(`| ${from} | ${need.item} | ${exposeText(provider, need.item)} | 按签名调用，不要复制其实现 |`)
     }
+  }
+  const errorCodes = [...new Set((module.constraints.join('\n').match(/\bE_[A-Z0-9_]+/g) ?? []))]
+  lines.push('', '### 4.1 错误码', '')
+  if (errorCodes.length === 0) {
+    lines.push(NONE)
+  } else {
+    lines.push('本模块的约束会触发以下错误码：', '')
+    for (const code of errorCodes) lines.push(`- \`${code}\``)
   }
   lines.push('', '## 5 约束', '')
   if (module.constraints.length === 0) {

@@ -24,7 +24,7 @@ function basePlan(overrides = {}) {
     nonGoals: ['不做实时推送'],
     boundaries: [{ dependency: 'node', purpose: '运行时', version: '22', fallback: '不启动' }],
     globals: { conventions: [], forbidden: [], envKeys: [] },
-    data: [{ table: 'users', columns: [{ name: 'id', type: 'uuid' }] }],
+    data: [{ table: 'users', owner: 'M1', columns: [{ name: 'id', type: 'uuid' }] }],
     modules: [
       {
         id: 'M1',
@@ -200,7 +200,10 @@ test('spec doc: nine numbered sections in order, empty sections say （无）', 
     '9 交付清单',
   ])
   assert.match(doc, /### 非目标\n（无）/)
-  assert.match(doc, /## 4 数据结构\n\n（无）/)
+  assert.match(doc, /### 4\.1 表\n\n（无）/)
+  assert.match(doc, /### 4\.2 类型\n\n（无）/)
+  assert.match(doc, /### 4\.3 错误码\n\n（无）/)
+  assert.match(doc, /### 4\.4 接口面\n\n（无）/)
   assert.match(doc, /（无跨模块依赖）/)
 })
 const winOnly = process.platform === 'win32'

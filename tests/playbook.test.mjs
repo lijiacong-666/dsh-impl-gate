@@ -12,6 +12,7 @@ const SECTIONS = [
   '什么时候用',
   '五步流程',
   '怎么写 compose-plan.json',
+  '类型、错误码与接口面',
   '怎么判断 SPEC.md 够不够',
   '怎么分发',
   '怎么回收',
@@ -26,7 +27,7 @@ test('both playbook files exist and are packaged', () => {
   assert.ok(pkg.files.includes('playbooks/examples/login.md'))
 })
 
-test('compose.md has the seven fixed headings in order', () => {
+test('compose.md has the eight fixed headings in order', () => {
   const text = fs.readFileSync(composePath, 'utf8')
   const headings = text
     .split(/\r?\n/)

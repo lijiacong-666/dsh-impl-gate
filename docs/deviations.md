@@ -17,6 +17,7 @@
 | D-11 | B1/B2/B5/B7 判定口径改为：mapping.md 覆盖全部「需要」条目 / 勾选表 id ⊆ checks.json id / mapping 每模块≥1 行且模块真实 / FAIL 行带 `repro:` | 清单原文 B1/B2/B5/B7 的最低断言偏流程（导出符号、git 历史），v1 取可机械判定的代理口径 | 已批（用户 m01090） |
 | D-12 | `pythonPath` 优先级实际为 配置 > PATH；DSH 捆绑解释器不自动探测，需在 `pythonPath` 手填绝对路径 | 宿主未暴露稳定的捆绑解释器路径，自动回退可能选错解释器 | 已按实际行为关闭 |
 | D-13 | `SPEC.md` 位于 `<outDir>/SPEC.md` 而非 graphRoot 内；ownership 会登记它，spec-graph 的 check 看不到它 | Windows 大小写不敏感，graphRoot 内的 `SPEC.md` 会被当成根节点 `spec.md`，触发 SECTION_MISSING / IMPL_LANGUAGE 等 9 条误报 | 已按实际行为关闭 |
+| D-14 | `types` / `errors` / `http` / `openQuestions` 与 `data[].owner` 为 v1 增量字段，schemaVersion 不变；旧 plan 不引用这些字段时仍可 materialize | 盲测显示只读 SPEC.md 无法开工：类型只有名字、错误码无目录、HTTP 面缺路径/响应体；增量字段保持向后兼容 | 已批（用户 m02531） |
 
 ## 维护规则
 

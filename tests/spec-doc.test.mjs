@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import test from 'node:test'
 import { computeWaves, renderSpecDoc } from '../lib/index.js'
 
@@ -16,6 +16,7 @@ function plan() {
     data: [
       {
         table: 'orders',
+        owner: 'M2',
         columns: [
           { name: 'id', type: 'uuid', constraints: ['主键'] },
           { name: 'amount', type: 'integer', constraints: ['>=0'] },
@@ -82,11 +83,11 @@ function render() {
   return { doc: renderSpecDoc({ plan: p, waves: waves.result }), waves: waves.result }
 }
 
-test('section 5 lists exactly the two requires edges', () => {
+test('section 5 lists exactly the two requires edges with verbatim items', () => {
   const { doc } = render()
   const section = doc.split('## 5 模块连线')[1].split('## 6 验收标准')[0]
   const rows = section.split('\n').filter((line) => line.startsWith('| ') && !line.startsWith('| 从') && !line.startsWith('| ---'))
-  assert.deepEqual(rows, ['| orders | shared | N1 → E1 |', '| api | orders | N1 → E1 |'])
+  assert.deepEqual(rows, ['| orders | shared | Db | Db |', '| api | orders | createOrder | createOrder |'])
 })
 
 test('module table has one row per module with <br> for multiple items', () => {
@@ -96,12 +97,16 @@ test('module table has one row per module with <br> for multiple items', () => {
   assert.match(section, /\| M2 \| orders \| 下单 \| createOrder \| Db \| orders\/create\.ts \|/)
 })
 
-test('data section renders one column table per table', () => {
+test('data section renders one column table per table with its owner', () => {
   const { doc } = render()
-  assert.match(doc, /### orders/)
-  assert.match(doc, /\| id \| uuid \| 主键 \|/)
-  assert.match(doc, /\| amount \| integer \| >=0 \|/)
+  assert.match(doc, /### 4\.1 表/)
+  assert.match(doc, /#### orders/)
+  assert.match(doc, /\| id \| uuid \| 主键 \| M2 \|/)
+  assert.match(doc, /\| amount \| integer \| >=0 \| M2 \|/)
   assert.match(doc, /索引：orders_created_idx/)
+  assert.match(doc, /### 4\.2 类型\n\n（无）/)
+  assert.match(doc, /### 4\.3 错误码\n\n（无）/)
+  assert.match(doc, /### 4\.4 接口面\n\n（无）/)
 })
 
 test('acceptance table uses AC-<module>-<n> ids', () => {
@@ -123,6 +128,8 @@ test('globals and deliverables are rendered, footer is fixed', () => {
   assert.match(doc, /### 约定\n- 金额用分/)
   assert.match(doc, /### 禁止\n- 不记录明文密码/)
   assert.match(doc, /### 环境变量\n- DATABASE_URL/)
+  assert.match(doc, /### 接口约定\n\n- 字段命名：camel\n- 列表包裹：否\n- 错误体形状：/)
   assert.match(doc, /```text\nshop\//)
+  assert.match(doc, /## 附录 A 未决问题\n\n（无）/)
   assert.ok(doc.endsWith('> 本文由 dsh-impl-gate 从 compose-plan.json 生成，改契约请改 plan 后重跑 materialize。\n'))
 })

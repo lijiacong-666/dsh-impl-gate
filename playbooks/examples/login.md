@@ -31,6 +31,7 @@
   "data": [
     {
       "table": "users",
+      "owner": "M2",
       "columns": [
         { "name": "id", "type": "uuid", "constraints": ["主键"] },
         { "name": "phone", "type": "text", "constraints": ["唯一"] },
@@ -38,7 +39,45 @@
         { "name": "openid", "type": "text", "constraints": ["可空", "唯一"] }
       ],
       "indexes": ["users_phone_idx"],
-      "notes": "手机号与 openid 至少一个非空"
+      "notes": "手机号与 openid 至少一个非空；由 M2 user-service 建表并 upsert，其他模块只读"
+    }
+  ],
+  "types": [
+    { "name": "Pool", "kind": "external", "source": "pg" },
+    {
+      "name": "User",
+      "kind": "object",
+      "fields": [
+        { "name": "id", "type": "string" },
+        { "name": "phone", "type": "string | null" },
+        { "name": "email", "type": "string | null" },
+        { "name": "openid", "type": "string | null" }
+      ]
+    },
+    {
+      "name": "TokenPair",
+      "kind": "object",
+      "fields": [
+        { "name": "accessToken", "type": "string" },
+        { "name": "expiresAt", "type": "string" }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": "E_AUTH_INVALID",
+      "status": 401,
+      "when": "验证码错误或已过期",
+      "shape": "{\"error\":{\"code\",\"message\"}}"
+    }
+  ],
+  "http": [
+    {
+      "method": "POST",
+      "path": "/auth/login",
+      "module": "M3",
+      "handler": "login",
+      "res": "TokenPair"
     }
   ],
   "modules": [

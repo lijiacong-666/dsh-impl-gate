@@ -1,0 +1,411 @@
+{
+  "schemaVersion": 1,
+  "name": "team-bookmarks",
+  "title": "团队书签服务",
+  "summary": "团队共享书签库：成员保存网址书签、打多个标签并按标签筛选，可从 Chrome 导出的 HTML 文件批量导入，支持标题与网址全文搜索；书签全团队可见，收藏夹按成员隔离。不做登录注册、不做浏览器插件、不做跨浏览器导入。",
+  "stack": "node22+typescript5+fastify4+postgres16+vitest2",
+  "goals": [
+    "成员可创建书签并为一条书签设置多个标签，列表接口支持按单个标签过滤",
+    "成员可上传 Chrome 导出的 HTML 书签文件批量导入，重复 URL 跳过并在报告中给出 created/skipped 计数",
+    "成员可按关键词对标题与网址做全文搜索，结果按相关度排序",
+    "书签库全团队共享，任何成员都能看到他人创建的书签；每个成员有独立收藏夹，收藏与取消收藏只影响自己的收藏夹"
+  ],
+  "nonGoals": [
+    "不做登录、注册、会话与权限模型，成员身份由上游网关注入",
+    "不做浏览器插件与书签同步，只做单次 HTML 文件导入",
+    "不导入 Firefox/Safari/Edge 的导出格式，也不导入 JSON 书签",
+    "不做书签回收站、版本历史与实时协同推送",
+    "不做移动端页面与分享链接"
+  ],
+  "boundaries": [
+    {
+      "dependency": "postgres",
+      "purpose": "持久化成员、书签、标签、收藏关系，并提供 tsvector 全文检索",
+      "version": "16",
+      "fallback": "启动时连接失败则以退出码 1 退出并打印 E_DB_CONNECT，不进入降级内存模式"
+    },
+    {
+      "dependency": "chrome-bookmarks-html",
+      "purpose": "用户上传的 Chrome「导出书签」HTML 文件，作为批量导入的输入来源",
+      "fallback": "解析失败返回 422 与 E_IMPORT_PARSE，整批不写入任何书签（事务回滚）"
+    },
+    {
+      "dependency": "upstream-gateway-header",
+      "purpose": "上游网关注入 X-Member-Id 请求头作为成员身份",
+      "fallback": "缺失或非法时返回 401 与 E_MEMBER_REQUIRED，不降级为匿名成员"
+    }
+  ],
+  "globals": {
+    "conventions": [
+      "所有时间以 UTC 存储，接口返回 ISO-8601 字符串",
+      "错误码统一 E_ 前缀，HTTP 状态码与错误码一一对应",
+      "所有 SQL 走参数化查询，禁止字符串拼接",
+      "模块对外函数只通过 exposes 暴露，内部实现文件不跨模块 import"
+    ],
+    "forbidden": [
+      "不在日志里打印上传的 HTML 全文与完整 URL 查询串",
+      "不在 http-api 之外直接拼 SQL",
+      "不让收藏接口返回他人的收藏夹"
+    ],
+    "envKeys": [
+      "DATABASE_URL",
+      "PORT",
+      "IMPORT_MAX_BYTES",
+      "SEARCH_LIMIT_DEFAULT"
+    ]
+  },
+  "data": [
+    {
+      "table": "members",
+      "columns": [
+        { "name": "id", "type": "uuid", "constraints": ["主键"] },
+        { "name": "member_key", "type": "text", "constraints": ["非空", "唯一"] },
+        { "name": "display_name", "type": "text", "constraints": ["非空"] },
+        { "name": "created_at", "type": "timestamptz", "constraints": ["非空", "默认 now()"] }
+      ],
+      "indexes": ["members_member_key_key"],
+      "notes": "member_key 即网关注入的 X-Member-Id"
+    },
+    {
+      "table": "bookmarks",
+      "columns": [
+        { "name": "id", "type": "uuid", "constraints": ["主键"] },
+        { "name": "owner_id", "type": "uuid", "constraints": ["非空", "外键 members(id)"] },
+        { "name": "title", "type": "text", "constraints": ["非空"] },
+        { "name": "url", "type": "text", "constraints": ["非空", "全团队唯一"] },
+        { "name": "created_at", "type": "timestamptz", "constraints": ["非空", "默认 now()"] },
+        { "name": "updated_at", "type": "timestamptz", "constraints": ["非空", "默认 now()"] }
+      ],
+      "indexes": ["bookmarks_url_key", "bookmarks_search_idx"],
+      "notes": "bookmarks_search_idx 为 GIN 索引：to_tsvector('simple', title || ' ' || url)；owner_id 只记创建者，不用于可见性过滤"
+    },
+    {
+      "table": "tags",
+      "columns": [
+        { "name": "id", "type": "uuid", "constraints": ["主键"] },
+        { "name": "name", "type": "text", "constraints": ["非空", "唯一", "小写化后比较"] }
+      ],
+      "indexes": ["tags_name_key"],
+      "notes": "标签名统一 trim + 小写后入库"
+    },
+    {
+      "table": "bookmark_tags",
+      "columns": [
+        { "name": "bookmark_id", "type": "uuid", "constraints": ["非空", "外键 bookmarks(id) ON DELETE CASCADE"] },
+        { "name": "tag_id", "type": "uuid", "constraints": ["非空", "外键 tags(id) ON DELETE CASCADE"] }
+      ],
+      "indexes": ["bookmark_tags_pkey", "bookmark_tags_tag_id_idx"],
+      "notes": "主键为 (bookmark_id, tag_id)，重复打标签幂等"
+    },
+    {
+      "table": "favorites",
+      "columns": [
+        { "name": "member_id", "type": "uuid", "constraints": ["非空", "外键 members(id) ON DELETE CASCADE"] },
+        { "name": "bookmark_id", "type": "uuid", "constraints": ["非空", "外键 bookmarks(id) ON DELETE CASCADE"] },
+        { "name": "created_at", "type": "timestamptz", "constraints": ["非空", "默认 now()"] }
+      ],
+      "indexes": ["favorites_pkey", "favorites_member_id_idx"],
+      "notes": "主键为 (member_id, bookmark_id)，个人收藏夹只按 member_id 过滤"
+    }
+  ],
+  "modules": [
+    {
+      "id": "M1",
+      "dir": "shared",
+      "title": "共享基础设施",
+      "responsibility": "只提供数据库连接池、id 生成与时间工具，不含任何业务规则",
+      "exposes": [
+        { "kind": "fn", "signature": "openDb(url: string): Promise<Pool>", "note": "创建全局唯一连接池，连接失败抛 E_DB_CONNECT" },
+        { "kind": "fn", "signature": "newId(): string", "note": "返回 UUID v7 字符串，单调递增" },
+        { "kind": "fn", "signature": "nowIso(): string", "note": "返回 UTC ISO-8601 时间字符串" }
+      ],
+      "requires": [],
+      "constraints": [
+        "连接池在进程内单例，重复调用 openDb 返回同一实例",
+        "openDb 在 3 秒内连不上即抛错，不做重试循环",
+        "本模块不 import 任何其它模块"
+      ],
+      "files": [
+        "shared/db.ts",
+        "shared/id.ts",
+        "shared/test/db.test.ts"
+      ],
+      "acceptance": [
+        {
+          "id": "shared-db-connect",
+          "assertion": "DATABASE_URL 指向不可达端口时 openDb 抛出 E_DB_CONNECT，命令退出码为 0（测试本身通过）",
+          "test": "pnpm vitest run shared/test/db.test.ts -t 'db connect failure'"
+        },
+        {
+          "id": "shared-id-unique",
+          "assertion": "连续调用 newId() 1000 次得到 1000 个互不相同的 UUID v7 字符串",
+          "test": "pnpm vitest run shared/test/db.test.ts -t 'id uniqueness'"
+        },
+        {
+          "id": "shared-db-singleton",
+          "assertion": "连续两次 openDb 返回同一 Pool 实例引用",
+          "test": "pnpm vitest run shared/test/db.test.ts -t 'db singleton'"
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "dir": "bookmark-store",
+      "title": "书签与标签存储",
+      "responsibility": "只负责书签的创建、读取、按标签过滤，以及标签的挂载与去重，不负责解析导入文件、不负责搜索排序、不负责收藏夹",
+      "exposes": [
+        { "kind": "fn", "signature": "createBookmark(input: CreateBookmarkInput): Promise<Bookmark>", "note": "url 全团队唯一，冲突抛 E_DUPLICATE_URL" },
+        { "kind": "fn", "signature": "getBookmark(id: string): Promise<Bookmark | null>", "note": "按 id 读取，不存在返回 null" },
+        { "kind": "fn", "signature": "listBookmarks(filter: BookmarkFilter): Promise<Bookmark[]>", "note": "filter.tag 为空时返回全团队书签，按 created_at 倒序" },
+        { "kind": "fn", "signature": "setTags(bookmarkId: string, tags: string[]): Promise<Bookmark>", "note": "覆盖式设置标签，自动建不存在的标签" }
+      ],
+      "requires": [
+        { "module": "M1", "item": "openDb(url: string): Promise<Pool>", "why": "读写 bookmarks/bookmark_tags/tags 表" },
+        { "module": "M1", "item": "newId(): string", "why": "生成书签与标签主键" }
+      ],
+      "constraints": [
+        "listBookmarks 不按 owner_id 过滤，全团队可见",
+        "createBookmark 遇到已存在 url 抛 E_DUPLICATE_URL 且不插入新行",
+        "setTags 对同一标签重复传入只保留一条关联，空数组表示清空标签",
+        "标签名 trim + 小写后写入，长度上限 32 字符"
+      ],
+      "files": [
+        "bookmark-store/store.ts",
+        "bookmark-store/tags.ts",
+        "bookmark-store/test/store.test.ts"
+      ],
+      "acceptance": [
+        {
+          "id": "bookmark-create-duplicate",
+          "assertion": "同一 url 第二次 createBookmark 抛 E_DUPLICATE_URL，bookmarks 表行数仍为 1",
+          "test": "pnpm vitest run bookmark-store/test/store.test.ts -t 'duplicate url'"
+        },
+        {
+          "id": "bookmark-filter-by-tag",
+          "assertion": "3 条书签分别打 a、b、a+b 标签后，listBookmarks({tag:'a'}) 返回 2 条",
+          "test": "pnpm vitest run bookmark-store/test/store.test.ts -t 'filter by tag'"
+        },
+        {
+          "id": "bookmark-team-visible",
+          "assertion": "成员 A 创建的书签出现在成员 B 调用 listBookmarks 的结果里",
+          "test": "pnpm vitest run bookmark-store/test/store.test.ts -t 'team visibility'"
+        },
+        {
+          "id": "bookmark-set-tags-idempotent",
+          "assertion": "对同一书签重复 setTags(['a','a']) 后 bookmark_tags 中只有一条 tag=a 关联",
+          "test": "pnpm vitest run bookmark-store/test/store.test.ts -t 'set tags idempotent'"
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "dir": "chrome-import",
+      "title": "Chrome 书签导入",
+      "responsibility": "只负责把 Chrome 导出的 HTML 文件解析成书签条目并批量写入书签库，不负责 HTTP 上传与鉴权",
+      "exposes": [
+        { "kind": "fn", "signature": "parseChromeHtml(html: string): ChromeBookmark[]", "note": "解析 DL/DT/H3/A 结构，保留目录路径，解码 HTML 实体" },
+        { "kind": "fn", "signature": "importChromeBookmarks(html: string, ownerId: string): Promise<ImportReport>", "note": "整批事务写入，返回 created/skipped/failed 计数" }
+      ],
+      "requires": [
+        { "module": "M2", "item": "createBookmark(input: CreateBookmarkInput): Promise<Bookmark>", "why": "把每条解析结果写成书签" },
+        { "module": "M2", "item": "listBookmarks(filter: BookmarkFilter): Promise<Bookmark[]>", "why": "导入前取现有 url 集合做去重" }
+      ],
+      "constraints": [
+        "只接受 Chrome 导出格式，缺少 <!DOCTYPE NETSCAPE-Bookmark-file-1> 时抛 E_IMPORT_FORMAT",
+        "单文件最多解析 5000 条，超过抛 E_IMPORT_TOO_LARGE",
+        "已存在的 url 计入 skipped，不更新标题与标签",
+        "大批量写入使用单个事务，任何一条致命错误整体回滚"
+      ],
+      "files": [
+        "chrome-import/parser.ts",
+        "chrome-import/importer.ts",
+        "chrome-import/test/import.test.ts",
+        "chrome-import/test/fixtures/chrome.html"
+      ],
+      "acceptance": [
+        {
+          "id": "import-parse-nested",
+          "assertion": "解析 chrome.html 得到 4 条书签，其中 2 条位于二级目录下，标题中的 &amp; 已解码为 &",
+          "test": "pnpm vitest run chrome-import/test/import.test.ts -t 'parse nested'"
+        },
+        {
+          "id": "import-batch-create",
+          "assertion": "空库导入 chrome.html 后 ImportReport.created 等于 4，bookmarks 表新增 4 行",
+          "test": "pnpm vitest run chrome-import/test/import.test.ts -t 'import creates rows'"
+        },
+        {
+          "id": "import-dedupe-skip",
+          "assertion": "同一文件重复导入第二次返回 created=0、skipped=4，表行数不变",
+          "test": "pnpm vitest run chrome-import/test/import.test.ts -t 'second import skips'"
+        },
+        {
+          "id": "import-format-reject",
+          "assertion": "传入非 Chrome 格式的 HTML 抛 E_IMPORT_FORMAT 且不写入任何行",
+          "test": "pnpm vitest run chrome-import/test/import.test.ts -t 'reject wrong format'"
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "dir": "search-service",
+      "title": "全文搜索",
+      "responsibility": "只负责标题与网址的全文检索与相关度排序，不负责写入书签、不负责标签过滤",
+      "exposes": [
+        { "kind": "fn", "signature": "searchBookmarks(query: string, limit: number): Promise<SearchHit[]>", "note": "query 为空返回空数组；limit 缺省取 SEARCH_LIMIT_DEFAULT" },
+        { "kind": "fn", "signature": "rebuildSearchIndex(): Promise<IndexStats>", "note": "重算全部书签的 tsvector，返回重建条数" }
+      ],
+      "requires": [
+        { "module": "M2", "item": "listBookmarks(filter: BookmarkFilter): Promise<Bookmark[]>", "why": "重建索引时拉取全部书签" },
+        { "module": "M1", "item": "openDb(url: string): Promise<Pool>", "why": "执行 tsvector 查询与索引重建" }
+      ],
+      "constraints": [
+        "使用 to_tsvector('simple', title || ' ' || url) 与 plainto_tsquery，不做中文分词扩展",
+        "结果按 ts_rank 降序、created_at 倒序兜底",
+        "limit 上限 100，非法值回落到 SEARCH_LIMIT_DEFAULT",
+        "查询串长度上限 200 字符，超出截断"
+      ],
+      "files": [
+        "search-service/index.ts",
+        "search-service/test/search.test.ts"
+      ],
+      "acceptance": [
+        {
+          "id": "search-title-hit",
+          "assertion": "库中有标题含 design 的书签时 searchBookmarks('design', 10) 返回该条且排在首位",
+          "test": "pnpm vitest run search-service/test/search.test.ts -t 'title hit'"
+        },
+        {
+          "id": "search-url-hit",
+          "assertion": "searchBookmarks('github.com', 10) 命中 url 含该串的书签，返回条数等于库中匹配数",
+          "test": "pnpm vitest run search-service/test/search.test.ts -t 'url hit'"
+        },
+        {
+          "id": "search-empty-query",
+          "assertion": "searchBookmarks('', 10) 返回空数组且不抛错",
+          "test": "pnpm vitest run search-service/test/search.test.ts -t 'empty query'"
+        },
+        {
+          "id": "search-limit-cap",
+          "assertion": "limit 传 1000 时实际返回条数不超过 100",
+          "test": "pnpm vitest run search-service/test/search.test.ts -t 'limit cap'"
+        }
+      ]
+    },
+    {
+      "id": "M5",
+      "dir": "favorites-service",
+      "title": "个人收藏夹",
+      "responsibility": "只负责按成员增删查个人收藏关系，不改变书签本身、不影响其他成员的收藏夹",
+      "exposes": [
+        { "kind": "fn", "signature": "addFavorite(memberId: string, bookmarkId: string): Promise<Favorite>", "note": "幂等，重复收藏返回已有记录" },
+        { "kind": "fn", "signature": "removeFavorite(memberId: string, bookmarkId: string): Promise<void>", "note": "不存在时不报错" },
+        { "kind": "fn", "signature": "listFavorites(memberId: string): Promise<Bookmark[]>", "note": "返回该成员收藏的书签，按收藏时间倒序" }
+      ],
+      "requires": [
+        { "module": "M2", "item": "getBookmark(id: string): Promise<Bookmark | null>", "why": "收藏前校验书签存在" },
+        { "module": "M1", "item": "openDb(url: string): Promise<Pool>", "why": "读写 favorites 表" }
+      ],
+      "constraints": [
+        "收藏不存在的 bookmarkId 抛 E_BOOKMARK_NOT_FOUND",
+        "listFavorites 只按 memberId 过滤，绝不返回他人收藏",
+        "addFavorite 重复调用不产生第二行，created_at 保持首次值"
+      ],
+      "files": [
+        "favorites-service/favorites.ts",
+        "favorites-service/test/favorites.test.ts"
+      ],
+      "acceptance": [
+        {
+          "id": "favorite-isolated",
+          "assertion": "成员 A 收藏 2 条后 listFavorites('A') 返回 2 条，同时 listFavorites('B') 返回空数组",
+          "test": "pnpm vitest run favorites-service/test/favorites.test.ts -t 'favorites isolated'"
+        },
+        {
+          "id": "favorite-idempotent",
+          "assertion": "对同一 (memberId, bookmarkId) 连续 addFavorite 两次，favorites 表只有 1 行",
+          "test": "pnpm vitest run favorites-service/test/favorites.test.ts -t 'add idempotent'"
+        },
+        {
+          "id": "favorite-remove-missing",
+          "assertion": "removeFavorite 一个不存在的收藏不抛错且表行数不变",
+          "test": "pnpm vitest run favorites-service/test/favorites.test.ts -t 'remove missing'"
+        }
+      ]
+    },
+    {
+      "id": "M6",
+      "dir": "http-api",
+      "title": "HTTP 接口层",
+      "responsibility": "只负责把各服务的函数挂成 HTTP 路由、解析 X-Member-Id 与请求体，不实现业务规则",
+      "exposes": [
+        { "kind": "http", "signature": "registerBookmarkRoutes(app: FastifyInstance, deps: BookmarkDeps): Promise<void>", "note": "POST/GET /bookmarks，GET 支持 ?tag=" },
+        { "kind": "http", "signature": "registerImportRoutes(app: FastifyInstance, deps: ImportDeps): Promise<void>", "note": "POST /imports/chrome，multipart 文件上传" },
+        { "kind": "http", "signature": "registerSearchRoutes(app: FastifyInstance, deps: SearchDeps): Promise<void>", "note": "GET /search?q=&limit=" },
+        { "kind": "http", "signature": "registerFavoriteRoutes(app: FastifyInstance, deps: FavoriteDeps): Promise<void>", "note": "GET/PUT/DELETE /favorites" },
+        { "kind": "http", "signature": "startServer(config: ServerConfig): Promise<ServerHandle>", "note": "按 PORT 监听，返回 close() 句柄" }
+      ],
+      "requires": [
+        { "module": "M1", "item": "openDb(url: string): Promise<Pool>", "why": "启动时建立连接池" },
+        { "module": "M2", "item": "listBookmarks(filter: BookmarkFilter): Promise<Bookmark[]>", "why": "GET /bookmarks 的数据来源" },
+        { "module": "M3", "item": "importChromeBookmarks(html: string, ownerId: string): Promise<ImportReport>", "why": "POST /imports/chrome 的落地实现" },
+        { "module": "M4", "item": "searchBookmarks(query: string, limit: number): Promise<SearchHit[]>", "why": "GET /search 的数据来源" },
+        { "module": "M5", "item": "listFavorites(memberId: string): Promise<Bookmark[]>", "why": "GET /favorites 的数据来源" }
+      ],
+      "constraints": [
+        "缺 X-Member-Id 时所有业务路由返回 401 与 E_MEMBER_REQUIRED",
+        "POST /imports/chrome 的 body 上限取 IMPORT_MAX_BYTES，超出返回 413",
+        "错误响应体统一为 { code, message }，不泄露 SQL 与堆栈",
+        "路由层只做参数校验与调用，不写 SQL"
+      ],
+      "files": [
+        "http-api/routes.ts",
+        "http-api/server.ts",
+        "http-api/test/routes.test.ts"
+      ],
+      "acceptance": [
+        {
+          "id": "api-bookmarks-create",
+          "assertion": "带 X-Member-Id 的 POST /bookmarks 返回 201 与书签 JSON；同一请求再发一次返回 409 与 E_DUPLICATE_URL",
+          "test": "pnpm vitest run http-api/test/routes.test.ts -t 'create bookmark route'"
+        },
+        {
+          "id": "api-missing-member",
+          "assertion": "不带 X-Member-Id 请求 GET /bookmarks 返回 401 与 E_MEMBER_REQUIRED",
+          "test": "pnpm vitest run http-api/test/routes.test.ts -t 'missing member header'"
+        },
+        {
+          "id": "api-import-upload",
+          "assertion": "POST /imports/chrome 上传内联 Chrome HTML 返回 200，且响应体 ImportReport.created 大于 0",
+          "test": "pnpm vitest run http-api/test/routes.test.ts -t 'import upload'"
+        },
+        {
+          "id": "api-search-query",
+          "assertion": "GET /search?q=github&limit=5 返回 JSON 数组且长度不超过 5",
+          "test": "pnpm vitest run http-api/test/routes.test.ts -t 'search route'"
+        }
+      ]
+    }
+  ],
+  "deliverables": {
+    "tree": "team-bookmarks/\n  shared/\n  bookmark-store/\n  chrome-import/\n  search-service/\n  favorites-service/\n  http-api/",
+    "files": [
+      { "path": "shared/db.ts", "purpose": "Postgres 连接池与 E_DB_CONNECT 错误" },
+      { "path": "shared/id.ts", "purpose": "UUID v7 生成与 UTC 时间工具" },
+      { "path": "shared/test/db.test.ts", "purpose": "连接失败、单例、id 唯一性测试" },
+      { "path": "bookmark-store/store.ts", "purpose": "书签创建、读取、按标签过滤" },
+      { "path": "bookmark-store/tags.ts", "purpose": "标签挂载、去重与自动建标签" },
+      { "path": "bookmark-store/test/store.test.ts", "purpose": "重复 URL、标签过滤、团队可见性测试" },
+      { "path": "chrome-import/parser.ts", "purpose": "Chrome 导出 HTML 解析器" },
+      { "path": "chrome-import/importer.ts", "purpose": "批量事务导入与去重报告" },
+      { "path": "chrome-import/test/import.test.ts", "purpose": "嵌套目录解析、批量导入、重复导入、格式拒绝测试" },
+      { "path": "chrome-import/test/fixtures/chrome.html", "purpose": "4 条书签的 Chrome 导出样例文件" },
+      { "path": "search-service/index.ts", "purpose": "tsvector 全文查询与索引重建" },
+      { "path": "search-service/test/search.test.ts", "purpose": "标题/网址命中、空查询、limit 上限测试" },
+      { "path": "favorites-service/favorites.ts", "purpose": "个人收藏夹增删查" },
+      { "path": "favorites-service/test/favorites.test.ts", "purpose": "收藏隔离、幂等、删除不存在测试" },
+      { "path": "http-api/routes.ts", "purpose": "四组业务路由与成员头校验" },
+      { "path": "http-api/server.ts", "purpose": "Fastify 实例装配与监听" },
+      { "path": "http-api/test/routes.test.ts", "purpose": "创建书签、缺头 401、上传导入、搜索路由测试" }
+    ]
+  }
+}
