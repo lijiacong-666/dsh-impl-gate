@@ -24,7 +24,7 @@ function basePlan() {
     nonGoals: ['不做注册'],
     boundaries: [{ dependency: 'pg', purpose: '存储成员', fallback: '启动失败退出' }],
     globals: { conventions: ['时间用 UTC'], forbidden: ['明文密码'], envKeys: ['DATABASE_URL'] },
-    data: [{ table: 'members', owner: 'M1', columns: [{ name: 'id', type: 'uuid' }] }],
+    data: [{ table: 'members', owner: 'M1', rowWriters: ['M1'], columns: [{ name: 'id', type: 'uuid' }] }],
     types: [
       { name: 'Member', kind: 'object', fields: [{ name: 'id', type: 'string' }] },
       {

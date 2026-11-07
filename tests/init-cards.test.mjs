@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -28,7 +28,7 @@ function makePlan(modules) {
     nonGoals: ['不做实时推送'],
     boundaries: [{ dependency: 'node', purpose: '运行时', version: '22', fallback: '不启动' }],
     globals: { conventions: ['统一错误码'], forbidden: ['不引第三方 ORM'], envKeys: ['DATABASE_URL'] },
-    data: [{ table: 'users', owner: 'M1', columns: [{ name: 'id', type: 'uuid' }] }],
+    data: [{ table: 'users', owner: 'M1', rowWriters: ['M1'], columns: [{ name: 'id', type: 'uuid' }] }],
     modules,
     deliverables: { tree: 'demo-app/', files: [{ path: 'src/index.ts', purpose: '入口' }] },
   }

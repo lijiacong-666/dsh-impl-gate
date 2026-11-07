@@ -18,6 +18,7 @@
 | D-12 | `pythonPath` 优先级实际为 配置 > PATH；DSH 捆绑解释器不自动探测，需在 `pythonPath` 手填绝对路径 | 宿主未暴露稳定的捆绑解释器路径，自动回退可能选错解释器 | 已按实际行为关闭 |
 | D-13 | `SPEC.md` 位于 `<outDir>/SPEC.md` 而非 graphRoot 内；ownership 会登记它，spec-graph 的 check 看不到它 | Windows 大小写不敏感，graphRoot 内的 `SPEC.md` 会被当成根节点 `spec.md`，触发 SECTION_MISSING / IMPL_LANGUAGE 等 9 条误报 | 已按实际行为关闭 |
 | D-14 | `types` / `errors` / `http` / `openQuestions` 与 `data[].owner` 为 v1 增量字段，schemaVersion 不变；旧 plan 不引用这些字段时仍可 materialize | 盲测显示只读 SPEC.md 无法开工：类型只有名字、错误码无目录、HTTP 面缺路径/响应体；增量字段保持向后兼容 | 已批（用户 m02531） |
+| D-15 | G7 新增的三类校验（`data[].rowWriters`、AC 路由闭合、`errors[].shape`）只判「结构自洽」，不判「语义正确」，版本不升 | 工具能查「表有没有运行时写入方、AC 里的路由有没有声明、错误码有没有响应体形状」，查不出「写入方是否真被调用、路由语义是否实现、形状是否贴合业务」；后者仍需人工审阅 SPEC | 已批（用户 G7 指令） |
 
 ## 维护规则
 

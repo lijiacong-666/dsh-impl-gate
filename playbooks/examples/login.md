@@ -32,6 +32,7 @@
     {
       "table": "users",
       "owner": "M2",
+      "rowWriters": ["M2"],
       "columns": [
         { "name": "id", "type": "uuid", "constraints": ["主键"] },
         { "name": "phone", "type": "text", "constraints": ["唯一"] },

@@ -19,9 +19,9 @@ function basePlan() {
     nonGoals: ['不做支付'],
     boundaries: [{ dependency: 'postgres', purpose: '持久化', version: '16', fallback: '启动失败并报错' }],
     globals: { conventions: ['错误统一用 code'], forbidden: ['禁止裸 SQL 拼接'], envKeys: ['DATABASE_URL'] },
-    data: [{ table: 'users', owner: 'M1', columns: [{ name: 'id', type: 'uuid', constraints: ['pk'] }], indexes: ['id'], notes: '用户表' }],
+    data: [{ table: 'users', owner: 'M1', rowWriters: ['M1'], columns: [{ name: 'id', type: 'uuid', constraints: ['pk'] }], indexes: ['id'], notes: '用户表' }],
     types: [{ name: 'Order', kind: 'object', fields: [{ name: 'id', type: 'string' }] }],
-    errors: [{ code: 'E_AUTH_REQUIRED', status: 401, when: '无会话' }],
+    errors: [{ code: 'E_AUTH_REQUIRED', status: 401, when: '无会话', shape: '{"error":{"code","message"}}' }],
     http: [{ method: 'POST', path: '/login', module: 'M1', handler: 'login', res: 'Order' }],
     modules: [
       {

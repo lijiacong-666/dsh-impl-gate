@@ -98,10 +98,10 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `goals` | 可验收的目标，至少 1 条 | `用户可用手机验证码登录` | `做好登录` |
 | `nonGoals` | 明确不做的事 | `不接企业微信` | `无` |
 | `boundaries` | 外部依赖及失败策略 | `{dependency:"postgres",purpose:"存用户",fallback:"启动失败并报错"}` | `{dependency:"db"}` |
-| `globals` | 全局约定/禁止/envKeys | `envKeys:["DATABASE_URL"]` | 省略 envKeys |
-| `data` | 表、字段与建表模块，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
+| `globals` | 全局约定/禁止/envKeys，可给统一 `errorShape` | `envKeys:["DATABASE_URL"]` | 省略 envKeys |
+| `data` | 表、字段、建表模块与运行时写入方，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
 | `types` | 契约里用到的类型定义（可选） | `{name:"User",kind:"object",fields:[…]}` | 只写类型名不写字段 |
-| `errors` | 错误码目录（可选，但被引用就必须声明） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误"}` | 只写 `E_` 前缀 |
+| `errors` | 错误码目录（可选，但被引用就必须声明） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误",shape:"{\"error\":{\"code\",\"message\"}}"}` | 只写 `E_` 前缀 |
 | `http` | 对外路由（可选） | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair"}` | 路径不写 `/` |
 | `openQuestions` | 自己拿不准、需要人裁决的点 | `["token 是否要支持刷新"]` | 用注释代替 |
 | `modules` | 模块数组，至少 1 个 | 见下 | 没有模块 |
@@ -159,15 +159,20 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 ### errors：先定错误体，再写状态码
 
 ```json
+"globals": {
+  "conventions": ["错误码使用 E_ 前缀"],
+  "forbidden": [],
+  "errorShape": "{\"error\":{\"code\",\"message\"}}"
+},
 "errors": [
-  { "code": "E_AUTH_INVALID", "status": 401, "when": "账号不存在或验证码错误",
-    "shape": "{\"error\":{\"code\",\"message\"}}" },
+  { "code": "E_AUTH_INVALID", "status": 401, "when": "账号不存在或验证码错误" },
   { "code": "E_TOKEN_EXPIRED", "status": 401, "when": "accessToken 过期" },
-  { "code": "E_DB_CONNECT", "status": 500, "when": "启动时连不上数据库" }
+  { "code": "E_DB_CONNECT", "status": 500, "when": "启动时连不上数据库",
+    "shape": "{\"error\":{\"code\",\"message\",\"detail\"}}" }
 ]
 ```
 
-规则：`code` 形如 `E_[A-Z0-9_]+` 且全 plan 唯一；内部错误也写 `500`；`constraints` 与 `acceptance.assertion` 里出现的每个 `E_` 码都必须在这里声明。`shape` 取第一条作为全局错误体。
+规则：`code` 形如 `E_[A-Z0-9_]+` 且全 plan 唯一；内部错误也写 `500`；`constraints` 与 `acceptance.assertion` 里出现的每个 `E_` 码都必须在这里声明。**每个错误码都要有响应体形状**：逐条写 `errors[].shape`，或只在 `globals.errorShape` 写一次默认值；两者都没有时 materialize 报 `/errors/<i>/shape must be a non-empty string`。4.3 的「响应体」列逐行打印，不会再出现「—」。
 
 ### http：路由必须落到某个模块的 http 签名
 
@@ -180,19 +185,21 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 ]
 ```
 
-规则：`module` 必须存在且该模块有 `kind:"http"` 的 expose；`handler` 必须等于该签名开头的标识符；`req`/`res` 必须是 `types` 里声明过的类型；同一 `method+path` 只能出现一次。
+规则：`module` 必须存在且该模块有 `kind:"http"` 的 expose；`handler` 必须等于该签名开头的标识符；`req`/`res` 必须是 `types` 里声明过的类型；同一 `method+path` 只能出现一次。**验收断言里写到的路由也必须先在这里声明**：`acceptance[].assertion` 里出现 `GET /bookmarks/:id`，`http[]` 就要有同 `method+path` 的条目，否则报 `acceptance references undeclared route "GET /bookmarks/:id" at /modules/<i>/acceptance/<j>`。
 
-### 表归属
+### 表归属与运行时写入方
 
-每张表都要写 `owner`（建表模块 id），且该模块的文件白名单里应有 migration 文件：
+每张表都要写 `owner`（建表模块 id）与 `rowWriters`（允许在运行时插入/更新该表的模块 id 列表，至少 1 个），且 owner 的文件白名单里应有 migration 文件：
 
 ```json
-{ "table": "members", "owner": "M2", "columns": [ … ] }
+{ "table": "members", "owner": "M1", "rowWriters": ["M1", "M2"], "columns": [ … ] }
 ```
 
 ```json
 "files": ["user-service/migrations/001_members.sql", "user-service/member.ts"]
 ```
+
+`owner` 只回答“谁建表”，`rowWriters` 回答“谁写入”。`rowWriters` 为空、或引用了未声明的模块，materialize 都报 `PLAN_INVALID`。被外键引用的表尤其要想清楚：`bookmarks.owner_id references members(id)` 意味着 `members` 必须有人在运行时写行；当写入方与 owner 不同时，4.1 会在字段表后打印 `写入方：M1, M2`，引用方必须能调到这些写入方。
 
 ## 怎么判断 SPEC.md 够不够
 
@@ -209,10 +216,24 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 9. `nonGoals` 明确写了不做的事，避免范围蔓延。
 10. `deliverables.tree` 与 `files` 能对上每个模块的白名单。
 11. 签名里出现的每个类型都在 `types` 里；`kind:"external"` 的写了 `source`。
-12. 每张表都有 `owner`，且该模块的白名单里有 migration 文件。
+12. 每张表都有 `owner` 与至少一个 `rowWriters`，且 owner 的白名单里有 migration 文件、写入方的 `exposes` 里能插入/更新行。
 13. 每个 `E_` 码都在 `errors` 里；同一状态码不对应两个语义相同的码。
 14. 需要“整批原子”的操作，其签名能拿到事务句柄，或该模块自己拥有写入权。
-15. `http` 面覆盖所有对外路由，响应体形状与 `errors[].shape` 一致。
+15. `http` 面覆盖所有对外路由，每条 AC 里出现的路由都能在 `http[]` 找到同 `method+path`；`errors[].shape` 与 §8 的错误体一致。
+16. 下一节「自洽性」8 条全部打勾。
+
+## 自洽性
+
+结构齐全（字段都在）不等于能开工（plan 自己说得通）。materialize 只查得出前五条里的机械部分，其余必须人来判；每条后面都写了不查会怎样：
+
+1. **身份模型写进契约。** 谁创建 `members`/`users` 行？请求头里的 id 凭什么保证存在？→ 把写入方写进该表 `data[].rowWriters`，并在对应模块 `exposes` 给出可调用的写入/校验签名（如 `ensureMember(openId: string): Promise<Member>`）。否则实现者只能相信一个从不存在的用户，外键与鉴权同时落空。
+2. **`openQuestions[]` 里不许留“本期按 X 处理”。** 做了决定就必须落进 `types`/`data`/`http` 字段，落不进去就删掉这条问题。→ 附录里的临时决定不进入任何模块契约，各实现者会各自发明一套。
+3. **每张表都要有运行时写入方，不只是建表方。** `owner` 回答“谁建表”，`rowWriters` 回答“谁插入/更新”；空数组直接 `PLAN_INVALID`。→ 只有 migration 没有写路径的表，查询永远为空。
+4. **每条 AC 里的 HTTP 路由必须先在 `http[]` 声明。** 断言写 `GET /bookmarks/:id`，就必须有同 `method+path` 的条目。→ 否则实现者照 AC 写测试，第一次运行就是 404。
+5. **每个错误码都要有响应体形状。** 逐条写 `errors[].shape`，或用 `globals.errorShape` 给统一默认值；4.3 的「响应体」列不允许出现「—」。→ 客户端无法解析错误，也说明错误码只是装饰。
+6. **全文搜索用同一个 `tsvector` 配置。** 建触发器的模块与写查询的模块必须约定同一个配置（如 `simple`），并写进双方的 `constraints`。→ 配置不一致时 `@@` 查询用不上索引，结果静默变空。
+7. **上传形态写进类型与限流归属。** JSON 内联 html 还是 multipart，要落到 `http[].req` 的类型，并写明哪个模块负责 `bodyLimit`。→ 形态不写清，实现者会同时写两套解析，限流也无人认领。
+8. **标签语义写进签名或类型。** 追加还是替换、`updated_by` 有没有列，必须可判定（写进签名参数、类型字段或 `constraints`）。→ “打标签”在实现层至少有四种互不兼容的行为。
 
 ## 怎么分发
 

@@ -28,6 +28,7 @@ export interface PlanError {
   code: string
   status: number
   when: string
+  /** Response body shape; may be omitted only when `globals.errorShape` supplies it. */
   shape?: string
 }
 
@@ -55,10 +56,14 @@ export interface Plan {
     envKeys?: string[]
     fieldCase?: 'camel' | 'snake'
     listEnvelope?: boolean
+    /** Default response body shape for every `errors[]` entry without its own. */
+    errorShape?: string
   }
   data: Array<{
     table: string
     owner: string
+    /** Modules allowed to insert/update rows at runtime (owner only creates). */
+    rowWriters: string[]
     columns: Array<{ name: string; type: string; constraints?: string[] }>
     indexes?: string[]
     notes?: string
@@ -123,8 +128,8 @@ const EXPOSE_KEYS = new Set(['kind', 'signature', 'note'])
 const REQUIRE_KEYS = new Set(['module', 'item', 'why'])
 const BOUNDARY_KEYS = new Set(['dependency', 'purpose', 'version', 'fallback'])
 const COLUMN_KEYS = new Set(['name', 'type', 'constraints'])
-const DATA_KEYS = new Set(['table', 'owner', 'columns', 'indexes', 'notes'])
-const GLOBALS_KEYS = new Set(['conventions', 'forbidden', 'envKeys', 'fieldCase', 'listEnvelope'])
+const DATA_KEYS = new Set(['table', 'owner', 'rowWriters', 'columns', 'indexes', 'notes'])
+const GLOBALS_KEYS = new Set(['conventions', 'forbidden', 'envKeys', 'fieldCase', 'listEnvelope', 'errorShape'])
 const DELIVERABLE_KEYS = new Set(['tree', 'files'])
 const FILE_KEYS = new Set(['path', 'purpose'])
 const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
@@ -159,6 +164,11 @@ const TYPE_REF_RE = /\b[A-Z][A-Za-z0-9_]*\b/g
 // annotated types are still reported.
 const TYPE_SLOT_REF_RE = /(?::|<|\||,)\s*([A-Z][A-Za-z0-9_]*)/g
 const HTTP_METHOD_PREFIX = /^(?:GET|POST|PUT|PATCH|DELETE)\s+/
+// A route reference in an acceptance assertion: an upper-case HTTP method,
+// whitespace, then a path beginning with "/". The narrow path alphabet keeps
+// prose such as "pnpm vitest run tests/x" out of this rule; a bare method with
+// no path never matches.
+const ROUTE_REF_RE = /\b(GET|POST|PUT|PATCH|DELETE)[ \t]+(\/[A-Za-z0-9._~:/?#%&=-]*)/g
 const ERROR_CODE_RE = /^E_[A-Z0-9_]+$/
 const ERROR_REF_RE = /\bE_[A-Z0-9_]+/g
 const HANDLER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*/
@@ -538,8 +548,8 @@ function validateTypes(raw: unknown, problems: PlanProblem[]): string[] {
   return names
 }
 
-/** Declared error catalog; returns the codes. */
-function validateErrors(raw: unknown, problems: PlanProblem[]): string[] {
+/** Declared error catalog; returns the codes. `defaultShape` comes from globals.errorShape. */
+function validateErrors(raw: unknown, problems: PlanProblem[], defaultShape: string | undefined): string[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) {
     problem(problems, '/errors', 'must be an array')
@@ -565,8 +575,14 @@ function validateErrors(raw: unknown, problems: PlanProblem[]): string[] {
       problem(problems, pointer(at, 'status'), 'must be an integer HTTP status between 100 and 599')
     }
     readString(entry.when, pointer(at, 'when'), problems)
-    if (entry.shape !== undefined && typeof entry.shape !== 'string') {
-      problem(problems, pointer(at, 'shape'), 'must be a string when present')
+    if (entry.shape !== undefined) {
+      if (typeof entry.shape !== 'string' || entry.shape.trim().length === 0) {
+        problem(problems, pointer(at, 'shape'), 'must be a non-empty string')
+      }
+    } else if (defaultShape === undefined) {
+      // D-15: one catalog-level default may replace per-code bodies, but the
+      // rendered SPEC must never contain a bare "—" in 4.3.
+      problem(problems, pointer(at, 'shape'), 'must be a non-empty string')
     }
   })
   return codes
@@ -729,10 +745,7 @@ function validateErrorRefs(modulesRaw: unknown, errorCodes: Set<string>, problem
 
 /** Rule 4: every table has exactly one existing owner module. */
 function validateTableOwners(dataRaw: unknown, modulesRaw: unknown, problems: PlanProblem[]): void {
-  if (!Array.isArray(modulesRaw)) return
-  const moduleIds = new Set(
-    modulesRaw.filter((module): module is Json => isRecord(module) && typeof module.id === 'string').map((module) => module.id as string),
-  )
+  const moduleIds = moduleIdsOf(modulesRaw)
   const data = Array.isArray(dataRaw) ? dataRaw : []
   data.forEach((entry, index) => {
     if (!isRecord(entry)) return
@@ -741,6 +754,83 @@ function validateTableOwners(dataRaw: unknown, modulesRaw: unknown, problems: Pl
     if (owner.length > 0 && !moduleIds.has(owner)) {
       problem(problems, pointer(at, 'owner'), `owner "${owner}" is not a module id`)
     }
+  })
+}
+
+function moduleIdsOf(modulesRaw: unknown): Set<string> {
+  const ids = new Set<string>()
+  if (!Array.isArray(modulesRaw)) return ids
+  for (const module of modulesRaw) {
+    if (isRecord(module) && typeof module.id === 'string' && module.id.length > 0) ids.add(module.id)
+  }
+  return ids
+}
+
+/**
+ * Rule 5: a table is not usable just because someone can CREATE it. Every
+ * table needs at least one module that inserts/updates rows at runtime, and
+ * every name in rowWriters must be a declared module id.
+ */
+function validateRowWriters(dataRaw: unknown, modulesRaw: unknown, problems: PlanProblem[]): void {
+  const moduleIds = moduleIdsOf(modulesRaw)
+  const data = Array.isArray(dataRaw) ? dataRaw : []
+  data.forEach((entry, index) => {
+    if (!isRecord(entry)) return
+    const at = pointer('/data', index)
+    const table = typeof entry.table === 'string' ? entry.table : ''
+    const writers = entry.rowWriters
+    if (!Array.isArray(writers) || writers.length === 0) {
+      problem(problems, pointer(at, 'rowWriters'), 'must list at least one module id')
+      return
+    }
+    writers.forEach((writer, writerIndex) => {
+      const writerAt = pointer(pointer(at, 'rowWriters'), writerIndex)
+      if (typeof writer !== 'string' || writer.trim().length === 0) {
+        problem(problems, writerAt, 'must be a non-empty module id')
+        return
+      }
+      if (!moduleIds.has(writer)) {
+        problem(problems, writerAt, `unknown module "${writer}" in rowWriters of table "${table}" at ${writerAt}`)
+      }
+    })
+  })
+}
+
+/**
+ * Rule 6: an acceptance assertion may name a route only after `http` declares
+ * it. Matching is method + path, exact; prose like "pnpm vitest run" has no
+ * leading "/" and is ignored.
+ */
+function validateAcceptanceRoutes(modulesRaw: unknown, httpRaw: unknown, problems: PlanProblem[]): void {
+  const declared = new Set<string>()
+  if (Array.isArray(httpRaw)) {
+    for (const route of httpRaw) {
+      if (!isRecord(route)) continue
+      if (typeof route.method === 'string' && typeof route.path === 'string') {
+        declared.add(`${route.method} ${route.path}`)
+      }
+    }
+  }
+  const modules = Array.isArray(modulesRaw) ? modulesRaw : []
+  modules.forEach((module, moduleIndex) => {
+    if (!isRecord(module) || !Array.isArray(module.acceptance)) return
+    const at = pointer(pointer('/modules', moduleIndex), 'acceptance')
+    module.acceptance.forEach((item, itemIndex) => {
+      if (!isRecord(item) || typeof item.assertion !== 'string') return
+      const itemAt = pointer(at, itemIndex)
+      const reported = new Set<string>()
+      for (const match of item.assertion.matchAll(ROUTE_REF_RE)) {
+        const route = `${match[1]} ${match[2] ?? ''}`
+        if (route.endsWith(' ')) continue
+        if (declared.has(route) || reported.has(route)) continue
+        reported.add(route)
+        problem(
+          problems,
+          pointer(itemAt, 'assertion'),
+          `acceptance references undeclared route "${route}" at ${itemAt}`,
+        )
+      }
+    })
   })
 }
 
@@ -784,6 +874,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
     }
   })
 
+  let defaultErrorShape: string | undefined
   if (!isRecord(raw.globals)) {
     problem(problems, '/globals', 'must be an object')
   } else {
@@ -796,6 +887,13 @@ export function validatePlan(rawInput: unknown): PlanValidation {
     }
     if (raw.globals.listEnvelope !== undefined && typeof raw.globals.listEnvelope !== 'boolean') {
       problem(problems, '/globals/listEnvelope', 'must be a boolean')
+    }
+    if (raw.globals.errorShape !== undefined) {
+      if (typeof raw.globals.errorShape !== 'string' || raw.globals.errorShape.trim().length === 0) {
+        problem(problems, '/globals/errorShape', 'must be a non-empty string when present')
+      } else {
+        defaultErrorShape = raw.globals.errorShape
+      }
     }
   }
 
@@ -834,9 +932,11 @@ export function validatePlan(rawInput: unknown): PlanValidation {
   validateModules(raw.modules, problems, goals.length)
 
   const typeNames = validateTypes(raw.types, problems)
-  const errorCodes = validateErrors(raw.errors, problems)
+  const errorCodes = validateErrors(raw.errors, problems, defaultErrorShape)
   validateTableOwners(raw.data, raw.modules, problems)
+  validateRowWriters(raw.data, raw.modules, problems)
   validateHttp(raw.http, raw.modules, new Set(typeNames), problems)
+  validateAcceptanceRoutes(raw.modules, raw.http, problems)
   validateTypeClosure(raw, new Set(typeNames), problems)
   validateErrorRefs(raw.modules, new Set(errorCodes), problems)
   if (raw.openQuestions !== undefined) readStringArray(raw.openQuestions, '/openQuestions', problems)

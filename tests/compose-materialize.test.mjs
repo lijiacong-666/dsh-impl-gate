@@ -24,7 +24,7 @@ function basePlan(overrides = {}) {
     nonGoals: ['不做实时推送'],
     boundaries: [{ dependency: 'node', purpose: '运行时', version: '22', fallback: '不启动' }],
     globals: { conventions: [], forbidden: [], envKeys: [] },
-    data: [{ table: 'users', owner: 'M1', columns: [{ name: 'id', type: 'uuid' }] }],
+    data: [{ table: 'users', owner: 'M1', rowWriters: ['M1'], columns: [{ name: 'id', type: 'uuid' }] }],
     modules: [
       {
         id: 'M1',

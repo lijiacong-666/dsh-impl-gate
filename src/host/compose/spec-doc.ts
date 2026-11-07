@@ -26,6 +26,31 @@ export interface SpecDocInput {
   waves: WavesResult
 }
 
+const FK_RE = /^references:\s*([A-Za-z0-9_]+)\(id\)$/
+
+/**
+ * G7: map each referenced table to the owners of the tables that reference it
+ * (self-references excluded). A table only read through a foreign key must
+ * still name its runtime writers, so 4.1 prints them when the referencing
+ * module is not one of them.
+ */
+function referencedByOwners(plan: Plan): Map<string, Set<string>> {
+  const owners = new Map<string, Set<string>>()
+  for (const entry of plan.data) {
+    for (const column of entry.columns ?? []) {
+      for (const constraint of column.constraints ?? []) {
+        const match = FK_RE.exec(constraint.trim())
+        const target = match?.[1]
+        if (target === undefined || target === entry.table) continue
+        const set = owners.get(target) ?? new Set<string>()
+        set.add(entry.owner)
+        owners.set(target, set)
+      }
+    }
+  }
+  return owners
+}
+
 export function renderSpecDoc(input: SpecDocInput): string {
   const { plan, waves } = input
   const byId = new Map(plan.modules.map((module) => [module.id, module]))
@@ -62,12 +87,25 @@ export function renderSpecDoc(input: SpecDocInput): string {
   if (plan.data.length === 0) {
     lines.push('（无）', '')
   } else {
+    const referencedBy = referencedByOwners(plan)
     for (const entry of plan.data) {
       lines.push(`#### ${entry.table}`)
       lines.push(...table(
         ['字段', '类型', '约束', '建表模块'],
         entry.columns.map((column) => [column.name, column.type, (column.constraints ?? []).join('<br>') || '—', entry.owner]),
       ))
+      // G7: the owner creates the table; rowWriters insert/update at runtime.
+      // If a table is referenced by a module that does not write it, name the
+      // writers so the implementer knows who creates the rows.
+      const writers = Array.isArray(entry.rowWriters) ? entry.rowWriters : []
+      const referencingOwners = referencedBy.get(entry.table)
+      if (
+        writers.length > 0 &&
+        referencingOwners !== undefined &&
+        (writers.length !== referencingOwners.size || writers.some((moduleId) => !referencingOwners.has(moduleId)))
+      ) {
+        lines.push('', `写入方：${writers.join(', ')}`)
+      }
       if (entry.indexes !== undefined && entry.indexes.length > 0) lines.push('', `索引：${entry.indexes.join('<br>')}`)
       if (entry.notes !== undefined) lines.push('', `说明：${entry.notes}`)
       lines.push('')
@@ -91,7 +129,7 @@ export function renderSpecDoc(input: SpecDocInput): string {
   } else {
     lines.push(...table(
       ['码', '状态码', '触发条件', '响应体'],
-      errors.map((error) => [error.code, String(error.status), error.when, error.shape ?? '—']),
+      errors.map((error) => [error.code, String(error.status), error.when, error.shape ?? plan.globals.errorShape ?? '—']),
     ), '')
   }
 
@@ -150,7 +188,7 @@ export function renderSpecDoc(input: SpecDocInput): string {
   lines.push('### 环境变量', ...listOrNone(plan.globals.envKeys ?? []), '')
   const fieldCase = plan.globals.fieldCase ?? 'camel'
   const envelope = plan.globals.listEnvelope === true ? '是' : '否'
-  const errorShape = plan.errors?.[0]?.shape ?? '（无）'
+  const errorShape = plan.globals.errorShape ?? plan.errors?.[0]?.shape ?? '（无）'
   lines.push(
     '### 接口约定',
     '',
