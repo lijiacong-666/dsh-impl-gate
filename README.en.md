@@ -56,6 +56,22 @@ dsh plugin --profile headless add dsh-impl-gate
 
 Restart DSH (or the desktop app) and reload the page. The command installs into the DSH you normally use; if you set your own `DSH_HOME`, run it in that same environment. Installing from source is for development; see [docs/development.md](docs/development.md).
 
+## Field test: meeting-room booking
+
+Starting from the one-line requirement "enterprise meeting-room booking", a model that had never seen the implementation wrote `compose-plan.json` using only `playbooks/compose.md`; `impl_gate_compose` then materialized it and an independent reviewer judged whether work could start. Final artifact: **632-line SPEC.md / 7 modules / 5 waves / 36 ACs / 21 error codes / 11 routes / 5 tables**.
+
+| Round | Ready | blocking | Main gaps |
+|---|---|---|---|
+| 1 | 1/7 | 3 | identity missing from signatures, two-arg error constructor cannot carry conflicts, no shared transaction |
+| 2 | 1/7 | 1 | series expansion had no employeeId channel |
+| 3 | 3/7 | 0 | constraints section not rendered (renderer bug, fixed in G8.1) |
+| 4 | void | — | host ran an old build; output had no §3.1 |
+| 5 | 2/7 | 0 | three names for one field, whitelist missed a file, cancel removed only one row |
+| 6 | 1/7 | 8 | error channel, cancel order, cross-package FK, validation ownership, cron/AC, transaction boundary |
+| 7 | — | **0** | two leftovers fixed; 632-line SPEC / 36 ACs |
+
+The review is model self-assessment; the blocking definition lives in [`playbooks/review.md`](playbooks/review.md), and ask items are left to the kickoff meeting.
+
 ## Input formats
 
 ### Checklist `<implRoot>/.impl-gate/checklist.md`
@@ -162,7 +178,7 @@ When `specgraphCwd` is empty the plugin walks up from `graphRoot` looking for `s
 
 ## Deviations
 
-Every implementation decision that differs from the checklist or the task book is registered in [docs/deviations.md](docs/deviations.md) (D-01 … D-12).
+Every implementation decision that differs from the checklist or the task book is registered in [docs/deviations.md](docs/deviations.md) (D-01 … D-16).
 
 ## Manual review items
 

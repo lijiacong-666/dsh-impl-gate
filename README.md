@@ -56,6 +56,22 @@ dsh plugin --profile headless add dsh-impl-gate
 
 安装后重启 DSH（桌面版请重启应用），刷新页面。命令会装到你平时使用的 DSH；如果你设置了自己的 `DSH_HOME`，请在同一个环境中运行。从源码安装用于开发调试，见 [docs/development.md](docs/development.md)。
 
+## 实测：会议室预订
+
+给一句话需求「企业级会议室预订」，让未参与开发的模型只读 `playbooks/compose.md` 写 `compose-plan.json`，再经 `impl_gate_compose` 物化，交独立评审判「能不能直接开工」。最终产物：**632 行 SPEC.md / 7 个模块 / 5 个波次 / 36 条 AC / 21 个错误码 / 11 条路由 / 5 张表**。
+
+| 轮次 | 可开工 | blocking | 主要缺口 |
+|---|---|---|---|
+| 1 | 1/7 | 3 | 身份没进签名、错误构造两参带不了 conflicts、无共同事务 |
+| 2 | 1/7 | 1 | 系列展开缺 employeeId 通道 |
+| 3 | 3/7 | 0 | 约束整节没渲染（渲染器 bug，已修 G8.1） |
+| 4 | 作废 | — | 宿主跑旧构建，产物无 §3.1 |
+| 5 | 2/7 | 0 | 字段三套名、白名单缺文件、取消只能消一行 |
+| 6 | 1/7 | 8 | 错误通道、取消顺序、跨包外键、校验归属、cron/AC、事务边界 |
+| 7 | — | **0** | 修 2 处残留后清零，SPEC 632 行 / 36 AC |
+
+评审由模型自评，blocking 的定义见 [`playbooks/review.md`](playbooks/review.md)，ask 类留给开工会议。
+
 ## 输入格式
 
 ### 勾选表 `<implRoot>/.impl-gate/checklist.md`
@@ -177,7 +193,7 @@ dsh plugin --profile headless add dsh-impl-gate
 
 ## 偏离登记
 
-与执行清单或任务书不一致的实现决定统一登记在 [docs/deviations.md](docs/deviations.md)（D-01 … D-12），README 只列结论。
+与执行清单或任务书不一致的实现决定统一登记在 [docs/deviations.md](docs/deviations.md)（D-01 … D-16），README 只列结论。
 
 ## 人工核对项
 
