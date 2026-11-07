@@ -1,4 +1,4 @@
-﻿// Host entry: runs in the DSH Node process. Bundled to lib/index.js as ESM.
+// Host entry: runs in the DSH Node process. Bundled to lib/index.js as ESM.
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { buildTools } from './tools.js'
@@ -8,6 +8,10 @@ export { buildTools } from './tools.js'
 export { auditChecklist, parseChecklist } from './checklist.js'
 // Exported for unit tests of the cached-run selectors (report / verify_contract).
 export { buildReport, buildVerifyContract, coverageStatement, rememberRun, runCheck } from './tools.js'
+// Exported for unit tests of the Step 5 replay gate (no config toggle needed).
+export { makeReplayCheck, parseReplayEvidence } from './assertions/exec.js'
+// Exported for unit tests of A2/A3 checklist validation.
+export { checkA2, checkA3 } from './assertions/input.js'
 
 export const name = __PLUGIN_NAME__
 

@@ -24,20 +24,10 @@ export const checkA2: Assertion = async (ctx) => {
   if (ctx.checklist.rows.size !== ctx.checks.length) {
     problems.push(`row count ${ctx.checklist.rows.size} != ${ctx.checks.length}`)
   }
-  if (ctx.checklist.duplicatedIds.length > 0) {
-    problems.push(`duplicate ids: ${ctx.checklist.duplicatedIds.join(', ')}`)
-  }
   if (missing.length > 0) problems.push(`missing ids: ${missing.join(', ')}`)
   if (unknown.length > 0) problems.push(`unknown ids: ${unknown.join(', ')}`)
-  for (const row of ctx.checklist.rows.values()) {
-    if (row.status !== 'PASS' && row.status !== 'FAIL' && row.status !== 'NOT-RUN') {
-      problems.push(`${row.id}: status "${row.status}"`)
-    } else if (row.status === 'NOT-RUN' && row.reason.length === 0) {
-      problems.push(`${row.id}: NOT-RUN without reason`)
-    } else if (row.status !== 'NOT-RUN' && row.reason.length > 0) {
-      problems.push(`${row.id}: reason on ${row.status}`)
-    }
-  }
+  // parseChecklist already validates status / reason / evidence prefix / duplicates.
+  for (const error of ctx.checklist.errors) problems.push(error)
   const evidence =
     `rows=${ctx.checklist.rows.size} expected=${ctx.checks.length} ` +
     `missing=${missing.length} unknown=${unknown.length} duplicates=${ctx.checklist.duplicatedIds.length} ` +
@@ -59,6 +49,7 @@ export const checkA3: Assertion = async (ctx) => {
   if (!ctx.checklist.provided) return checklistMissing()
   const problems: string[] = []
   let prefixOk = 0
+  let placeholders = 0
   const runnable: Array<{ id: string; argv: string[]; expected: number }> = []
   for (const row of ctx.checklist.rows.values()) {
     const isCommand = /^command:\s*\S/i.test(row.evidence)
@@ -80,6 +71,10 @@ export const checkA3: Assertion = async (ctx) => {
       continue
     }
     const payload = commandPayload(row.evidence)
+    if (/<[^>]+>/.test(payload)) {
+      placeholders += 1
+      continue
+    }
     const argv = splitCommand(payload)
     if (argv.length < 2 || argv.includes('-m') === false || argv.includes('specgraph') === false) continue
     if (runnable.length < 3) runnable.push({ id: row.id, argv, expected: Number(exitMatch[1]) })
@@ -100,7 +95,7 @@ export const checkA3: Assertion = async (ctx) => {
 
   const evidence =
     `rows=${ctx.checklist.rows.size} prefix_ok=${prefixOk} sampled=${runnable.length} ` +
-    `replay=[${results.join(',')}] problems=${problems.length}`
+    `placeholders_skipped=${placeholders} replay=[${results.join(',')}] problems=${problems.length}`
   return problems.length === 0
     ? { status: 'PASS', evidence }
     : { status: 'FAIL', evidence: `${evidence} :: ${firstProblems(problems)}` }

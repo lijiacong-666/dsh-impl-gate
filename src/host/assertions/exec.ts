@@ -40,6 +40,13 @@ export function makeReplayCheck(id: string): Assertion {
     if (!parsed) {
       return { status: 'NOT-RUN', reason: 'EVIDENCE_TOKEN_UNSPECIFIED', evidence: `row ${id} evidence is not a command` }
     }
+    if (/<[^>]+>/.test(parsed.command)) {
+      return {
+        status: 'NOT-RUN',
+        reason: 'EVIDENCE_TOKEN_UNSPECIFIED',
+        evidence: `row ${id} command contains a <placeholder>; skipped`,
+      }
+    }
     const argv = splitCommand(parsed.command)
     const first = argv[0]
     if (first === undefined || !firstTokenAllowed(first)) {
@@ -50,7 +57,11 @@ export function makeReplayCheck(id: string): Assertion {
       }
     }
     if (ctx.replayBudget.remaining <= 0) {
-      return { status: 'NOT-RUN', reason: 'EXEC_DISABLED', evidence: `replay budget exhausted (${REPLAY_LIMIT})` }
+      return {
+        status: 'NOT-RUN',
+        reason: 'EXEC_DISABLED',
+        evidence: `skipped=replay_budget_exhausted limit=${REPLAY_LIMIT}`,
+      }
     }
     ctx.replayBudget.remaining -= 1
     try {
@@ -64,9 +75,16 @@ export function makeReplayCheck(id: string): Assertion {
         evidence: `cmd=${parsed.command}; exit_db=${parsed.exitCode}; run_again=${out.exitCode}; combined_head=${out.stderr || head}`,
       }
     } catch (error) {
+      const err = error as Error & { code?: string }
+      if (err.code === 'E_TIMEOUT' || /timeout|did not finish within/i.test(err.message)) {
+        return {
+          status: 'FAIL',
+          evidence: `cmd=${parsed.command}; expected=${parsed.exitCode}; timeout=${REPLAY_TIMEOUT_MS}ms; spawn_error=${err.message}`,
+        }
+      }
       return {
         status: 'FAIL',
-        evidence: `cmd=${parsed.command}; expected=${parsed.exitCode}; spawn_error=${(error as Error).message}`,
+        evidence: `cmd=${parsed.command}; expected=${parsed.exitCode}; spawn_error=${err.message}`,
       }
     }
   }

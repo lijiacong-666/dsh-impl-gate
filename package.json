@@ -15,14 +15,6 @@
     "contract",
     "gate"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mofei/dsh-impl-gate.git"
-  },
-  "homepage": "https://github.com/mofei/dsh-impl-gate#readme",
-  "bugs": {
-    "url": "https://github.com/mofei/dsh-impl-gate/issues"
-  },
   "template": {
     "name": "dsh-plugin-template",
     "author": "exoticknight",
