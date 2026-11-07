@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ASSERTIONS } from './assertions/index.js'
 import type { AssertionContext } from './assertions/types.js'
 import { loadChecks, type CheckItem } from './checks.js'
@@ -509,6 +510,12 @@ function renderReport(_args: unknown, value: unknown): Array<{ type: 'text'; tex
   return [{ type: 'text', text: lines.filter((line) => line.length > 0).join('\n') }]
 }
 
+export interface ComposeReview {
+  playbook: string
+  specPath: string
+  rubric: string[]
+}
+
 export interface ComposePayload {
   ok: boolean
   mode: string
@@ -516,6 +523,7 @@ export interface ComposePayload {
   draftPath: string
   missingSlots: string[]
   problems: PlanProblem[]
+  review: ComposeReview
   graphRoot?: string
   specMd?: string
   packageMd?: string
@@ -523,6 +531,22 @@ export interface ComposePayload {
   files?: string[]
   waves?: Array<{ index: number; modules: string[]; dependsOn: string[] }>
   overlaps?: Array<{ a: string; b: string; files: string[] }>
+}
+
+/** G8: the verdict scale a reviewer must apply to every module of SPEC.md. */
+export const REVIEW_RUBRIC = ['可开工', '需澄清', '不可开工']
+
+/**
+ * G8 review entry point: both compose modes point at the packaged playbook and
+ * the SPEC.md a reviewer reads. `playbooks/` ships beside `lib/` in the repo
+ * and in an installed package, so the same resolve works in both.
+ */
+export function composeReview(outDir: string): ComposeReview {
+  return {
+    playbook: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'playbooks', 'review.md'),
+    specPath: path.join(path.resolve(outDir), 'SPEC.md'),
+    rubric: [...REVIEW_RUBRIC],
+  }
 }
 
 export interface ComposeFailure extends ToolFailure {
@@ -562,6 +586,7 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
         draftPath: '',
         missingSlots: [],
         problems: [],
+        review: composeReview(outDirRaw),
         graphRoot: outcome.graphRoot,
         specMd: outcome.specMd,
         packageMd: outcome.packageMd,
@@ -622,6 +647,7 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
     draftPath,
     missingSlots: missingSlots(template),
     problems: [],
+    review: composeReview(outDir),
   }
 }
 
@@ -657,6 +683,11 @@ function renderInit(_args: unknown, value: unknown): Array<{ type: 'text'; text:
   return [{ type: 'text', text: lines.join('\n') }]
 }
 
+function reviewLine(review: ComposeReview | undefined): string {
+  if (review === undefined) return 'review: not available'
+  return `review: ${review.playbook} | spec: ${review.specPath} | rubric: ${review.rubric.join('/')}`
+}
+
 function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
   const payload = value as Partial<ComposePayload & ComposeFailure>
   if (payload.error !== undefined) {
@@ -682,6 +713,7 @@ function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; te
       `manifest: ${payload.manifestPath ?? ''}`,
       `files (${payload.files?.length ?? 0}): ${(payload.files ?? []).join(', ')}`,
       waves.length > 0 ? waves : 'waves: none',
+      reviewLine(payload.review),
     ]
     if (overlaps.length > 0) {
       lines.push(`overlaps (${overlaps.length}): ${overlaps.map((entry) => `${entry.a}/${entry.b}: ${entry.files.join(', ')}`).join(' | ')}`)
@@ -691,6 +723,7 @@ function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; te
   const slots = payload.missingSlots ?? []
   const lines = [`impl_gate_compose ${payload.mode ?? ''}: ${payload.planPath ?? ''}`, `draft: ${payload.draftPath ?? ''}`]
   lines.push(slots.length === 0 ? 'missingSlots: none' : `missingSlots (${slots.length}): ${slots.join(' | ')}`)
+  lines.push(reviewLine(payload.review))
   return [{ type: 'text', text: lines.join('\n') }]
 }
 
@@ -865,6 +898,16 @@ const composeOutputSchema = {
     },
     graphRoot: { type: 'string' },
     specMd: { type: 'string' },
+    review: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        playbook: { type: 'string' },
+        specPath: { type: 'string' },
+        rubric: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['playbook', 'specPath', 'rubric'],
+    },
     packageMd: { type: 'string' },
     manifestPath: { type: 'string' },
     files: { type: 'array', items: { type: 'string' } },

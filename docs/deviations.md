@@ -19,6 +19,7 @@
 | D-13 | `SPEC.md` 位于 `<outDir>/SPEC.md` 而非 graphRoot 内；ownership 会登记它，spec-graph 的 check 看不到它 | Windows 大小写不敏感，graphRoot 内的 `SPEC.md` 会被当成根节点 `spec.md`，触发 SECTION_MISSING / IMPL_LANGUAGE 等 9 条误报 | 已按实际行为关闭 |
 | D-14 | `types` / `errors` / `http` / `openQuestions` 与 `data[].owner` 为 v1 增量字段，schemaVersion 不变；旧 plan 不引用这些字段时仍可 materialize | 盲测显示只读 SPEC.md 无法开工：类型只有名字、错误码无目录、HTTP 面缺路径/响应体；增量字段保持向后兼容 | 已批（用户 m02531） |
 | D-15 | G7 新增的三类校验（`data[].rowWriters`、AC 路由闭合、`errors[].shape`）只判「结构自洽」，不判「语义正确」，版本不升 | 工具能查「表有没有运行时写入方、AC 里的路由有没有声明、错误码有没有响应体形状」，查不出「写入方是否真被调用、路由语义是否实现、形状是否贴合业务」；后者仍需人工审阅 SPEC | 已批（用户 G7 指令） |
+| D-16 | G8 的必填列覆盖校验是启发式：列名 snake_case→camelCase 后，只在该表 `rowWriters` 模块的 `exposes[].signature` 里找同名字段（对象类型的 `fields` 或参数名本身） | 只能证明「签名里有这个字段的入口」，不能证明实现真的把它写进 INSERT；嵌套 input 类型不展开、`Omit`/`Partial` 包装按严格处理，因此可能**低估**缺口；但含 `default` 的列直接豁免，不会误伤 `created_at` 这类由数据库填值的列 | 已批（用户 G8 指令） |
 
 ## 维护规则
 

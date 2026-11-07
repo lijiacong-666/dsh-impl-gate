@@ -820,6 +820,157 @@ function validateRowWriters(dataRaw: unknown, modulesRaw: unknown, problems: Pla
 }
 
 /**
+ * Rule 5b (G8): a NOT NULL column without a default must be writable. The
+ * blind runs produced `bookings.employee_id not null` while the write
+ * signature was `createBooking(input: BookingInput)` and `BookingInput` had no
+ * `employeeId`: structurally closed, unimplementable.
+ *
+ * The lookup is deliberately heuristic (D-16): snake_case → camelCase, then a
+ * same-named field in an object-typed parameter of a writer signature, or a
+ * same-named parameter itself. Nested input types are not expanded, and
+ * Omit/Partial wrappers stay strict instead of exempting the column.
+ */
+const NOT_NULL_EXEMPT_COLUMNS = new Set(['id', 'created_at', 'updated_at', 'deleted_at'])
+
+interface SignatureParam {
+  name: string
+  type: string
+}
+
+function toCamelCase(name: string): string {
+  return name.replace(/_+([A-Za-z0-9])/g, (_match: string, char: string) => char.toUpperCase())
+}
+
+/** Parameter list without the outermost parentheses; undefined when not function-shaped (D-14). */
+function parameterListOf(signature: string): string | undefined {
+  const open = signature.indexOf('(')
+  if (open < 0) return undefined
+  let depth = 0
+  for (let index = open; index < signature.length; index += 1) {
+    const char = signature[index]
+    if (char === '(') depth += 1
+    else if (char === ')') {
+      depth -= 1
+      if (depth === 0) return signature.slice(open + 1, index)
+    }
+  }
+  return undefined
+}
+
+/** Split at top-level commas so `Record<string, string>` stays one parameter. */
+function splitTopLevel(input: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let current = ''
+  for (const char of input) {
+    if (char === '<' || char === '(' || char === '[' || char === '{') depth += 1
+    else if (char === '>' || char === ')' || char === ']' || char === '}') depth = Math.max(0, depth - 1)
+    if (char === ',' && depth === 0) {
+      parts.push(current)
+      current = ''
+      continue
+    }
+    current += char
+  }
+  if (current.length > 0) parts.push(current)
+  return parts
+}
+
+function parseSignatureParams(signature: string): SignatureParam[] {
+  const body = parameterListOf(signature.replace(HTTP_METHOD_PREFIX, '').trim())
+  if (body === undefined) return []
+  const params: SignatureParam[] = []
+  for (const chunk of splitTopLevel(body)) {
+    const text = chunk.trim()
+    if (text.length === 0) continue
+    const colon = text.indexOf(':')
+    const name = (colon === -1 ? text : text.slice(0, colon)).replace(/[?\s]+$/u, '').trim()
+    if (name.length === 0) continue
+    params.push({ name, type: colon === -1 ? '' : text.slice(colon + 1).trim() })
+  }
+  return params
+}
+
+function objectTypeFields(typesRaw: unknown): Map<string, Set<string>> {
+  const fields = new Map<string, Set<string>>()
+  if (!Array.isArray(typesRaw)) return fields
+  for (const type of typesRaw) {
+    if (!isRecord(type) || typeof type.name !== 'string' || type.kind !== 'object') continue
+    const names = new Set<string>()
+    if (Array.isArray(type.fields)) {
+      for (const field of type.fields) {
+        if (isRecord(field) && typeof field.name === 'string' && field.name.length > 0) names.add(field.name)
+      }
+    }
+    fields.set(type.name, names)
+  }
+  return fields
+}
+
+/** Every field name a set of writer modules can accept as input. */
+function writeFieldNames(
+  modules: unknown[],
+  writerIds: string[],
+  objectFields: Map<string, Set<string>>,
+): Set<string> {
+  const names = new Set<string>()
+  const writers = new Set(writerIds)
+  for (const module of modules) {
+    if (!isRecord(module) || typeof module.id !== 'string' || !writers.has(module.id)) continue
+    const exposes = Array.isArray(module.exposes) ? module.exposes : []
+    for (const expose of exposes) {
+      if (!isRecord(expose) || typeof expose.signature !== 'string') continue
+      for (const param of parseSignatureParams(expose.signature)) {
+        names.add(param.name)
+        const declared = objectFields.get(param.type)
+        if (declared !== undefined) for (const field of declared) names.add(field)
+      }
+    }
+  }
+  return names
+}
+
+function validateNotNullColumns(
+  dataRaw: unknown,
+  modulesRaw: unknown,
+  typesRaw: unknown,
+  problems: PlanProblem[],
+): void {
+  const data = Array.isArray(dataRaw) ? dataRaw : []
+  const modules = Array.isArray(modulesRaw) ? modulesRaw : []
+  const objectFields = objectTypeFields(typesRaw)
+  data.forEach((entry, dataIndex) => {
+    if (!isRecord(entry)) return
+    const at = pointer('/data', dataIndex)
+    const writers = Array.isArray(entry.rowWriters)
+      ? entry.rowWriters.filter(
+          (writer): writer is string => typeof writer === 'string' && writer.trim().length > 0,
+        )
+      : []
+    const writeFields = writeFieldNames(modules, writers, objectFields)
+    const columns = Array.isArray(entry.columns) ? entry.columns : []
+    columns.forEach((column, columnIndex) => {
+      if (!isRecord(column) || typeof column.name !== 'string') return
+      const name = column.name
+      if (name.length === 0 || NOT_NULL_EXEMPT_COLUMNS.has(name.toLowerCase())) return
+      const constraints = Array.isArray(column.constraints)
+        ? column.constraints.filter((constraint): constraint is string => typeof constraint === 'string')
+        : []
+      const text = constraints.join(' ').toLowerCase()
+      if (!text.includes('not null') || text.includes('default')) return
+      const field = toCamelCase(name)
+      if (writeFields.has(field)) return
+      const writerList = writers.length > 0 ? writers.join(', ') : 'none'
+      problem(
+        problems,
+        pointer(pointer(at, 'columns'), columnIndex),
+        `not-null column "${name}" has no input field "${field}" in write signatures of rowWriters (${writerList})`,
+      )
+    })
+  })
+}
+
+/**
  * Rule 6: an acceptance assertion may name a route only after `http` declares
  * it. Matching is method + path, exact; prose like "pnpm vitest run" has no
  * leading "/" and is ignored.
@@ -962,6 +1113,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
   const errorCodes = validateErrors(raw.errors, problems, defaultErrorShape)
   validateTableOwners(raw.data, raw.modules, problems)
   validateRowWriters(raw.data, raw.modules, problems)
+  validateNotNullColumns(raw.data, raw.modules, raw.types, problems)
   validateHttp(raw.http, raw.modules, new Set(typeNames), problems)
   validateAcceptanceRoutes(raw.modules, raw.http, problems)
   validateTypeClosure(raw, new Set(typeNames), problems)

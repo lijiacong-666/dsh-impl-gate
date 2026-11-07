@@ -43,6 +43,7 @@
     "lib/index.js",
     "checks/impl-gate.checks.json",
     "playbooks/compose.md",
+    "playbooks/review.md",
     "playbooks/examples/login.md",
     "icon.svg",
     "cordis.patch.yml",

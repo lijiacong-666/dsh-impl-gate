@@ -187,6 +187,18 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 
 规则：`module` 必须存在且该模块有 `kind:"http"` 的 expose；`handler` 必须等于该签名开头的标识符；`req`/`res` 必须是 `types` 里声明过的类型；同一 `method+path` 只能出现一次。**验收断言里写到的路由也必须先在这里声明**：`acceptance[].assertion` 里出现 `GET /bookmarks/:id`，`http[]` 就要有同 `method+path` 的条目，否则报 `acceptance references undeclared route "GET /bookmarks/:id" at /modules/<i>/acceptance/<j>（已声明：…）`。断言里的 query string（`GET /bookmarks?scope=team`）、句尾标点（`GET /bookmarks,`）和包裹引号（`GET “/bookmarks”`）不参与路由比对；但 `:param` 名称不同仍算不同路由，不会模糊匹配。
 
+`kind:"http"` 的 expose 必须写成函数签名式，`handler` 才等于签名开头的标识符：
+
+```json
+"exposes": [
+  { "kind": "http", "signature": "login(input: LoginInput): Promise<SessionToken>" }
+]
+```
+
+上面这条签名的 `handler` 是 `login`；只写 `login`（动词）或 `POST /auth/login`（路由）都不是签名，materialize 会报 `handler "login" does not match the leading identifier of any kind:"http" signature`。请求体用 `input: LoginInput` 这种带类型名的参数，`types` 里就要有 `LoginInput` 的字段表，评审环节会逐字段问「谁提供、空值怎么办」。
+
+路由与签名齐了之后，别直接分发：先按 [`review.md`](review.md) 的评审环逐模块判定「可开工 / 需澄清 / 不可开工」，通过线是 ≥80% 可开工且无不可开工；不合格的条目回灌成 plan 字段、重跑 materialize，最多 3 轮。
+
 ### 表归属与运行时写入方
 
 每张表都要写 `owner`（建表模块 id）与 `rowWriters`（允许在运行时插入/更新该表的模块 id 列表，至少 1 个），且 owner 的文件白名单里应有 migration 文件：
