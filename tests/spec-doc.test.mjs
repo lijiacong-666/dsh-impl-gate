@@ -138,6 +138,31 @@ function constraintsSection(doc) {
   return doc.split('### 3.1 模块约束')[1].split('## 4 数据结构')[0]
 }
 
+function tableSection(doc, name) {
+  return doc.split(`#### ${name}`)[1].split('####')[0]
+}
+
+test('section 4.1 always renders runtime writers, even a single one', () => {
+  const p = plan()
+  p.data[0].rowWriters = ['M2']
+  const waves = computeWaves(p)
+  assert.equal(waves.ok, true)
+  const doc = renderSpecDoc({ plan: p, waves: waves.result })
+  const section = tableSection(doc, 'orders')
+  assert.match(section, /^\| 字段 \| 类型 \| 约束 \| 建表模块 \| 运行时写入方 \|$/m)
+  assert.match(section, /^\| id \| uuid \| 主键 \| M2 \| M2 \|$/m)
+})
+
+test('section 4.1 lists multiple writers in plan order', () => {
+  const p = plan()
+  p.data[0].rowWriters = ['M2', 'M5']
+  const waves = computeWaves(p)
+  assert.equal(waves.ok, true)
+  const doc = renderSpecDoc({ plan: p, waves: waves.result })
+  const section = tableSection(doc, 'orders')
+  assert.match(section, /^\| amount \| integer \| >=0 \| M2 \| M2, M5 \|$/m)
+})
+
 test('section 3.1 renders every constraint of a module in one row', () => {
   const p = plan()
   p.modules[1].constraints = ['金额不可为负', '跨模块写库必须走 M1 的事务句柄']

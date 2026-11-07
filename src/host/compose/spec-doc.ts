@@ -99,14 +99,22 @@ export function renderSpecDoc(input: SpecDocInput): string {
     const referencedBy = referencedByOwners(plan)
     for (const entry of plan.data) {
       lines.push(`#### ${entry.table}`)
+      const writers = Array.isArray(entry.rowWriters) ? entry.rowWriters : []
+      // G10: every table names its runtime writers in the table itself. The
+      // G7 prose line below stays as a cross-reference for foreign keys.
       lines.push(...table(
-        ['字段', '类型', '约束', '建表模块'],
-        entry.columns.map((column) => [column.name, column.type, (column.constraints ?? []).join('<br>') || '—', entry.owner]),
+        ['字段', '类型', '约束', '建表模块', '运行时写入方'],
+        entry.columns.map((column) => [
+          column.name,
+          column.type,
+          (column.constraints ?? []).join('<br>') || '—',
+          entry.owner,
+          writers.length > 0 ? writers.join(', ') : '（无）',
+        ]),
       ))
       // G7: the owner creates the table; rowWriters insert/update at runtime.
       // If a table is referenced by a module that does not write it, name the
       // writers so the implementer knows who creates the rows.
-      const writers = Array.isArray(entry.rowWriters) ? entry.rowWriters : []
       const referencingOwners = referencedBy.get(entry.table)
       if (
         writers.length > 0 &&
