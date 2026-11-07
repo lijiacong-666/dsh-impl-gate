@@ -12,7 +12,7 @@ Turns the 32 IMPL-GATE assertions into three callable DSH tools: give it a spec-
 
 - **Calls, does not reimplement**: every check spawns `python -m specgraph check --json` and returns its issues verbatim (`graphIssues` + `graphExitCode`).
 - **32 verdicts, one by one**: groups A (deliverables), B (implementation boundary), M (modules/imports), Q (quality); each id yields `status` + `evidence` (≤2 KB). Anything unjudgeable is NOT-RUN, never a guess.
-- **Three tools**: `impl_gate_check` runs once and caches; `impl_gate_report` renders the summary and checklist; `impl_gate_verify_contract` re-checks only A1–A5.
+- **Five tools**: `impl_gate_check` runs once and caches; `impl_gate_report` renders the summary and checklist; `impl_gate_verify_contract` re-checks only A1–A5; `impl_gate_compose` emits the contract graph and SPEC; `impl_gate_init` emits parallel task cards.
 
 ## What it does not do
 
@@ -98,6 +98,7 @@ The three header names are fixed; each module must be a real node folder and eac
 | `impl_gate_report` | `root` (required), `runId` | Reads the cache; without `runId` uses the latest run for that root |
 | `impl_gate_verify_contract` | `root` (required), `runId` | Re-checks A1–A5 only, never re-runs the other assertions |
 | `impl_gate_compose` | `outDir` (required), `requirement`, `name`, `stack`, `mode`, `overwrite`, `specgraphCwd` | `plan` writes `compose-plan.json` and `SPEC-DRAFT.md`; `materialize` emits the graph, `SPEC.md` and `export/` |
+| `impl_gate_init` | `outDir` (required), `implRoot`, `overwrite` | Writes `<outDir>/tasks/`: `TASKS.md`, `cards.json`, `wave-<n>/<id>-<dir>.md`; leaves the graph, `SPEC.md` and `export/` untouched |
 
 `SPEC.md` lives at `<outDir>/SPEC.md`, beside the graph root rather than inside it: on case-insensitive Windows a graph-root `SPEC.md` is read as the root node `spec.md` and produces false `SECTION_MISSING` / `IMPL_LANGUAGE` findings. `ownership` records it, and spec-graph's `check` does not see it (expected) — deviation D-13.
 

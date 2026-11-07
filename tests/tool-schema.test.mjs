@@ -88,6 +88,7 @@ test('exactly four tools are registered', () => {
     'impl_gate_report',
     'impl_gate_verify_contract',
     'impl_gate_compose',
+    'impl_gate_init',
   ])
 })
 

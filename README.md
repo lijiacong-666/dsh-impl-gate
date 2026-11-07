@@ -12,7 +12,7 @@
 
 - **调用而非重写**：每次检查都 spawn `python -m specgraph check --json`，图的问题按原样返回（`graphIssues` + `graphExitCode`）。
 - **32 条逐条裁决**：A（交付物）、B（实现边界）、M（模块/导入）、Q（质量）四组，每条产出 `status` + `evidence`（≤2 KB）；判不了的写 NOT-RUN，不猜。
-- **三个工具**：`impl_gate_check` 跑一次并缓存；`impl_gate_report` 读缓存出汇总与勾选表；`impl_gate_verify_contract` 只复核 A1–A5。
+- **五个工具**：`impl_gate_check` 跑一次并缓存；`impl_gate_report` 读缓存出汇总与勾选表；`impl_gate_verify_contract` 只复核 A1–A5；`impl_gate_compose` 出契约图谱与 SPEC；`impl_gate_init` 出多 AI 并行任务卡。
 
 ## 不做什么
 
@@ -98,6 +98,7 @@ dsh plugin --profile headless add dsh-impl-gate
 | `impl_gate_report` | `root`（必填）、`runId` | 读缓存汇总；无 `runId` 时取该根最近一次运行 |
 | `impl_gate_verify_contract` | `root`（必填）、`runId` | 只复核 A1–A5，不重跑其他断言 |
 | `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`；`materialize` 生成图谱、`SPEC.md` 与 `export/` |
+| `impl_gate_init` | `outDir`（必填）、`implRoot`、`overwrite` | 按波次生成 `<outDir>/tasks/`：`TASKS.md`、`cards.json`、`wave-<n>/<id>-<dir>.md`；不改图谱、`SPEC.md`、`export/` |
 
 ### `impl_gate_compose` 的输出结构
 

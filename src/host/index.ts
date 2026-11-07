@@ -16,6 +16,8 @@ export { renderSpecDoc } from './compose/spec-doc.js'
 export { materializePlan } from './compose/materialize.js'
 export { resolveSpecgraphEnv, preflightSpecgraph, findSpecgraphHome } from './specgraph.js'
 export { computeWaves } from './init/waves.js'
+export { initTasks } from './init/init.js'
+export { renderTaskCard, renderTasksDoc, buildCardsJson, cardPathOf } from './init/cards.js'
 // Exported for unit tests of the Step 5 replay gate (no config toggle needed).
 export { makeReplayCheck, parseReplayEvidence } from './assertions/exec.js'
 // Exported for unit tests of A2/A3 checklist validation.

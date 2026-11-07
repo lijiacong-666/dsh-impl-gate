@@ -12,6 +12,7 @@ import { loadChecklist } from './checklist.js'
 import { renderDraft } from './compose/draft.js'
 import { materializePlan } from './compose/materialize.js'
 import { emptyPlan, missingSlots, type PlanProblem } from './compose/plan.js'
+import { initTasks, type InitFailure, type InitPayload } from './init/init.js'
 import { hashContractFiles } from './graph-hash.js'
 import {
   SpecgraphError,
@@ -624,6 +625,38 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
   }
 }
 
+/**
+ * G3: builds per-module task cards from <outDir>/compose-plan.json.
+ * Argument validation stays here; all plan/card work lives in init/.
+ */
+export function buildInit(rawArgs: unknown): InitPayload | InitFailure {
+  const args = (rawArgs ?? {}) as Record<string, unknown>
+  const outDir = typeof args.outDir === 'string' ? args.outDir.trim() : ''
+  if (outDir.length === 0) return { ok: false, code: 'E_ROOT_MISSING', message: 'outDir is required' }
+  const implRoot = typeof args.implRoot === 'string' ? args.implRoot : ''
+  const overwrite = args.overwrite === true
+  return initTasks(outDir, { implRoot, overwrite })
+}
+
+function renderInit(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
+  const payload = value as Partial<Omit<InitPayload, 'ok'>> & { ok?: boolean; code?: string; message?: string }
+  if (payload.ok !== true) {
+    return [{ type: 'text', text: `impl_gate_init failed: ${payload.code ?? ''} — ${payload.message ?? ''}` }]
+  }
+  const lines = [
+    `impl_gate_init: ${payload.tasksDir ?? ''}`,
+    `cards (${payload.cards?.length ?? 0}): ${(payload.cards ?? []).map((card) => `${card.moduleId} ${card.cardPath}`).join(', ')}`,
+    `files (${payload.filesWritten?.length ?? 0})`,
+  ]
+  for (const wave of payload.waves ?? []) {
+    lines.push(`wave ${wave.index}: ${wave.modules.join(', ')}${wave.dependsOn.length > 0 ? ` (after ${wave.dependsOn.join(', ')})` : ''}`)
+  }
+  if ((payload.overlaps ?? []).length > 0) {
+    lines.push(`overlaps: ${(payload.overlaps ?? []).map((entry) => `${entry.a}/${entry.b}: ${entry.files.join(', ')}`).join(' | ')}`)
+  }
+  return [{ type: 'text', text: lines.join('\n') }]
+}
+
 function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
   const payload = value as Partial<ComposePayload & ComposeFailure>
   if (payload.error !== undefined) {
@@ -884,6 +917,67 @@ const composeOutputSchema = {
   },
 }
 
+const initParameters = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    outDir: { type: 'string', description: '含 compose-plan.json 的目录（绝对路径）；卡片写到 <outDir>/tasks/。' },
+    implRoot: { type: 'string', description: '可选；只影响卡片文件白名单的前缀展示，不参与校验。' },
+    overwrite: { type: 'boolean', description: '是否覆盖 tasks/ 下本次要写的文件，默认 false。' },
+  },
+  required: ['outDir'],
+}
+
+const initOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ok: { type: 'boolean' },
+    tasksDir: { type: 'string' },
+    cards: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          moduleId: { type: 'string' },
+          wave: { type: 'number' },
+          cardPath: { type: 'string' },
+        },
+        required: ['moduleId', 'wave', 'cardPath'],
+        additionalProperties: false,
+      },
+    },
+    waves: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          index: { type: 'number' },
+          modules: { type: 'array', items: { type: 'string' } },
+          dependsOn: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['index', 'modules', 'dependsOn'],
+        additionalProperties: false,
+      },
+    },
+    overlaps: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          a: { type: 'string' },
+          b: { type: 'string' },
+          files: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['a', 'b', 'files'],
+        additionalProperties: false,
+      },
+    },
+    filesWritten: { type: 'array', items: { type: 'string' } },
+    error: errorSchema,
+  },
+}
+
 export function buildTools(deps: ToolDeps) {
   const check = {
     name: 'impl_gate_check',
@@ -953,5 +1047,22 @@ export function buildTools(deps: ToolDeps) {
     },
   }
 
-  return [check, report, verify, compose]
+  const init = {
+    name: 'impl_gate_init',
+    description:
+      'Generate per-module task cards from <outDir>/compose-plan.json into <outDir>/tasks/ (TASKS.md, cards.json, ' +
+      'wave-N/<id>-<dir>.md). Waves and overlaps come from the same planner as materialize; output is deterministic. ' +
+      'It never edits the graph root, SPEC.md or export/, and never invents requirements or assertions.',
+    parameters: initParameters,
+    output: { schema: initOutputSchema, render: renderInit },
+    async execute(args: unknown) {
+      try {
+        return buildInit(args)
+      } catch (error) {
+        return failureFrom(error)
+      }
+    },
+  }
+
+  return [check, report, verify, compose, init]
 }
