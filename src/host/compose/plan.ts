@@ -891,6 +891,30 @@ function parseSignatureParams(signature: string): SignatureParam[] {
   return params
 }
 
+/**
+ * G9: bulk writers carry rows as `rows: BookingRow[]`, and nullable inputs as
+ * `BookingRow | null`. Normalize both to the bare type name so its fields
+ * expand. Multi-level arrays (`Name[][]`) and unions of several objects stay
+ * unexpanded on purpose (D-16: heuristic, may under-report, never fabricates).
+ */
+function elementTypeName(type: string): string {
+  let text = type.trim()
+  const parts = text.split('|').map((part) => part.trim())
+  if (parts.length === 2) {
+    const nonNull = parts.filter((part) => part !== 'null' && part !== 'undefined')
+    const only = nonNull.length === 1 ? nonNull[0] : undefined
+    if (only !== undefined) text = only
+  }
+  const generic = /^Array<(.+)>$/u.exec(text)
+  if (generic !== null && generic[1] !== undefined) {
+    const inner = generic[1].trim()
+    if (inner.endsWith('[]')) return inner
+    text = inner
+  }
+  if (!text.endsWith('[]')) return text
+  return text.slice(0, -2).trim()
+}
+
 function objectTypeFields(typesRaw: unknown): Map<string, Set<string>> {
   const fields = new Map<string, Set<string>>()
   if (!Array.isArray(typesRaw)) return fields
@@ -922,7 +946,7 @@ function writeFieldNames(
       if (!isRecord(expose) || typeof expose.signature !== 'string') continue
       for (const param of parseSignatureParams(expose.signature)) {
         names.add(param.name)
-        const declared = objectFields.get(param.type)
+        const declared = objectFields.get(elementTypeName(param.type))
         if (declared !== undefined) for (const field of declared) names.add(field)
       }
     }

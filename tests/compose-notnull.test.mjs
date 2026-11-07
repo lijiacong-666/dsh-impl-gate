@@ -185,6 +185,66 @@ test('a camelCase column name is matched without conversion', () => {
   assert.ok(findProblem(plan, '/data/0/columns/1') !== undefined)
 })
 
+test('an object-array parameter expands the fields of its element type (G9)', () => {
+  const plan = clone(basePlan())
+  plan.types.push({
+    name: 'BookingRow',
+    kind: 'object',
+    fields: [
+      { name: 'employeeId', type: 'string' },
+      { name: 'startsAt', type: 'string' },
+    ],
+  })
+  plan.modules[0].exposes = [fnExpose('insertBookingRows(rows: BookingRow[]): Promise<Booking>')]
+  const result = validatePlan(plan)
+  assert.ok(result.plan !== null, JSON.stringify(result.problems))
+  assert.deepEqual(result.problems, [])
+})
+
+test('a missing field inside the array element type is reported at the column path', () => {
+  const plan = clone(basePlan())
+  plan.types.push({ name: 'MissingRow', kind: 'object', fields: [{ name: 'employeeId', type: 'string' }] })
+  plan.modules[0].exposes = [fnExpose('insertBookingRows(rows: MissingRow[]): Promise<Booking>')]
+  const found = findProblem(plan, '/data/0/columns/2')
+  assert.ok(found !== undefined, JSON.stringify(validatePlan(plan).problems))
+  assert.equal(
+    found.message,
+    'not-null column "starts_at" has no input field "startsAt" in write signatures of rowWriters (M1)',
+  )
+  assert.equal(findProblem(plan, '/data/0/columns/1'), undefined)
+})
+
+test('Array<T> and nullable T | null expand like T[] (G9)', () => {
+  const plan = clone(basePlan())
+  plan.types.push({
+    name: 'BookingRow',
+    kind: 'object',
+    fields: [
+      { name: 'employeeId', type: 'string' },
+      { name: 'startsAt', type: 'string' },
+    ],
+  })
+  for (const signature of [
+    'insertBookingRows(rows: Array<BookingRow>): Promise<Booking>',
+    'insertBooking(rows: BookingRow | null): Promise<Booking>',
+  ]) {
+    plan.modules[0].exposes = [fnExpose(signature)]
+    assert.deepEqual(validatePlan(plan).problems, [], signature)
+  }
+})
+
+test('an external element type is not expanded and does not swallow the check (G9)', () => {
+  const plan = clone(basePlan())
+  plan.types.push({ name: 'PayRow', kind: 'external', source: 'payments-api' })
+  plan.modules[0].exposes = [fnExpose('insertBookingRows(rows: PayRow[]): Promise<Booking>')]
+  const found = findProblem(plan, '/data/0/columns/1')
+  assert.ok(found !== undefined, JSON.stringify(validatePlan(plan).problems))
+  assert.equal(
+    found.message,
+    'not-null column "employee_id" has no input field "employeeId" in write signatures of rowWriters (M1)',
+  )
+})
+
 test('plan mode returns a review entry whose playbook resolves on disk', async () => {
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-g8-plan-'))
   try {
