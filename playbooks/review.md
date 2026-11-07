@@ -28,7 +28,7 @@
 
 1. `bookings.rule_id references recurring_rules(id)`，写它的模块在波次 3、建表的在波次 4，各包独立迁移 → 谁先建表不确定。
 2. `constraints: 除 M7 外禁止手写状态码`，但该模块 `requires` 里没有 `toHttpError`，无法抛 `E_*`。
-3. 先判「非本人」再判「不存在」，`E_BOOKMARK_NOT_FOUND` 永远到不了。
+3. 先判「非本人」再判「不存在」，`E_BOOKING_NOT_FOUND` 永远到不了。
 4. `insertBookingRows(tx, rows: BookingRow[])` 命中不到 `slot_date`，报 `not-null column "slot_date" has no input field "slotDate"`。
 5. `slot_date` 只靠 `default now()`，运行时没人显式写这一列。
 6. `TimeSlot.date` / `BookingRow.slotDate` / AC 里的 `slotDate` 三处各叫一个名字。
