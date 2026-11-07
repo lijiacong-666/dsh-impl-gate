@@ -5,6 +5,14 @@
   "icon": "./icon.svg",
   "license": "Apache-2.0",
   "author": "mofei",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lijiacong-666/dsh-impl-gate.git"
+  },
+  "homepage": "https://github.com/lijiacong-666/dsh-impl-gate#readme",
+  "bugs": {
+    "url": "https://github.com/lijiacong-666/dsh-impl-gate/issues"
+  },
   "keywords": [
     "deepseek-harness",
     "dsh",
