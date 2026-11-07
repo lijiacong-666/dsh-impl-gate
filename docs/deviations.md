@@ -11,7 +11,7 @@
 | D-05 | Q4 为 `mode:notrun`，reason `NETWORK_BLOCK_UNSUPPORTED` | 插件无法屏蔽宿主网络，人工也核不出断网行为 | 已批 |
 | D-06 | `specgraphCwd` 留空时从 `graphRoot` 上溯找 `specgraph/__init__.py` 并注入 `PYTHONPATH` | 源码态否则 `No module named specgraph` | 已批；解析到的路径必须写进 evidence |
 | D-07 | 勾选表格式锁为四列 `id \| status \| evidence \| reason` | A2–A4 需要确定性解析 | 已批；Step 6 写进 README |
-| D-08 | v1 不写 repository/homepage/bugs，README 也不提供 GitHub 安装与 Release 链接 | GitHub 443 不通，未建远程；不写假地址 | 已结案（v1 不写假地址） |
+| D-08 | `package.json` 现已填真实 repository/homepage/bugs；README 仍不提供 GitHub 安装与 Release 链接 | 建仓后才有真实地址 | 已解决：本地仓库已填真实地址；npm 0.1.0 tarball 早于该字段，下个版本生效 |
 | D-09 | `allowCommandReplay` 默认 `false`；M1–M6/M8/M9、Q2/Q3/Q5–Q9 默认 NOT-RUN `EXEC_DISABLED`；开启后 ≤5 条、120s、首词限 `python/pnpm/node`、cwd 限 `implRoot` | 重放证据命令有执行风险，默认关；重放是对这类断言唯一可机械判定的证据 | 已批（用户 m01090） |
 | D-10 | B3/B4/B6 固定 NOT-RUN，reason 依次 `EVIDENCE_TOKEN_UNSPECIFIED` / `MANUAL_REVIEW_REQUIRED` / `HUMAN_PROCESS_REQUIRED` | 语义检索、裁决记录、流程纪律无法机械判定 | 已批（用户 m01090） |
 | D-11 | B1/B2/B5/B7 判定口径改为：mapping.md 覆盖全部「需要」条目 / 勾选表 id ⊆ checks.json id / mapping 每模块≥1 行且模块真实 / FAIL 行带 `repro:` | 清单原文 B1/B2/B5/B7 的最低断言偏流程（导出符号、git 历史），v1 取可机械判定的代理口径 | 已批（用户 m01090） |
