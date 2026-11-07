@@ -82,6 +82,15 @@ export function renderSpecDoc(input: SpecDocInput): string {
   ))
   lines.push('')
 
+  // 3.1: constraints are contract, not commentary. Blind reviews missed lock
+  // keys and error-construction rules that only existed in plan.constraints.
+  lines.push('### 3.1 模块约束', '')
+  lines.push(...table(
+    ['模块', '约束'],
+    plan.modules.map((module) => [module.id, (module.constraints ?? []).join('<br>') || '（无）']),
+  ))
+  lines.push('')
+
   // 4
   lines.push('## 4 数据结构', '', '### 4.1 表', '')
   if (plan.data.length === 0) {

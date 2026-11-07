@@ -225,6 +225,10 @@ test('materialize mode returns the same review entry', async (t) => {
     assert.equal(result.review.playbook, path.join(root, 'playbooks', 'review.md'))
     assert.equal(result.review.specPath, path.join(outDir, 'SPEC.md'))
     assert.equal(fs.existsSync(result.review.specPath), true)
+    const spec = fs.readFileSync(result.review.specPath, 'utf8')
+    // G8.1: materialize must carry the per-module constraints into SPEC.md.
+    assert.match(spec, /### 3\.1 模块约束/)
+    assert.match(spec, /^\| M1 \| 失败返回 500 \|$/m)
   } finally {
     fs.rmSync(outDir, { recursive: true, force: true })
   }

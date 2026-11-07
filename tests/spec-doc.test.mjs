@@ -133,3 +133,40 @@ test('globals and deliverables are rendered, footer is fixed', () => {
   assert.match(doc, /## 附录 A 未决问题\n\n（无）/)
   assert.ok(doc.endsWith('> 本文由 dsh-impl-gate 从 compose-plan.json 生成，改契约请改 plan 后重跑 materialize。\n'))
 })
+
+function constraintsSection(doc) {
+  return doc.split('### 3.1 模块约束')[1].split('## 4 数据结构')[0]
+}
+
+test('section 3.1 renders every constraint of a module in one row', () => {
+  const p = plan()
+  p.modules[1].constraints = ['金额不可为负', '跨模块写库必须走 M1 的事务句柄']
+  const waves = computeWaves(p)
+  assert.equal(waves.ok, true)
+  const doc = renderSpecDoc({ plan: p, waves: waves.result })
+  const section = constraintsSection(doc)
+  assert.match(section, /^\| M2 \| 金额不可为负<br>跨模块写库必须走 M1 的事务句柄 \|$/m)
+  assert.match(section, /^\| M1 \| 无全局可变状态 \|$/m)
+})
+
+test('a module without constraints renders （无） instead of an empty cell', () => {
+  const p = plan()
+  p.modules[0].constraints = []
+  const waves = computeWaves(p)
+  assert.equal(waves.ok, true)
+  const doc = renderSpecDoc({ plan: p, waves: waves.result })
+  assert.match(constraintsSection(doc), /^\| M1 \| （无） \|$/m)
+})
+
+test('a pipe inside a constraint is escaped and keeps the table two-column', () => {
+  const p = plan()
+  p.modules[2].constraints = ['错误码一律 E_ 前缀 | 禁止手写状态码']
+  const waves = computeWaves(p)
+  assert.equal(waves.ok, true)
+  const doc = renderSpecDoc({ plan: p, waves: waves.result })
+  const section = constraintsSection(doc)
+  assert.match(section, /^\| M3 \| 错误码一律 E_ 前缀 \\\| 禁止手写状态码 \|$/m)
+  const row = section.split('\n').find((line) => line.startsWith('| M3 '))
+  assert.ok(row !== undefined)
+  assert.equal(row.replace(/\\\|/g, '').split('|').length, 4, row)
+})
