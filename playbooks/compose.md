@@ -232,7 +232,8 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 13. 每个 `E_` 码都在 `errors` 里；同一状态码不对应两个语义相同的码。
 14. 需要“整批原子”的操作，其签名能拿到事务句柄，或该模块自己拥有写入权。
 15. `http` 面覆盖所有对外路由，每条 AC 里出现的路由都能在 `http[]` 找到同 `method+path`；`errors[].shape` 与 §8 的错误体一致。
-16. 下一节「自洽性」8 条全部打勾。
+16. 每个 `not null` 且无 `default` 的列，在 `rowWriters` 的入参类型里都有同名字段（`employee_no`→`employeeNo`）；由代码固定填值的列（如 `synced_at`）要么写进入参类型，要么在列上给 `default`——校验器不推断代码行为，别指望它认。
+17. 下一节「自洽性」8 条全部打勾。
 
 ## 自洽性
 
