@@ -4,6 +4,8 @@ import z from '@deepseek-ai/schemastery'
 import { buildTools } from './tools.js'
 
 export { buildTools } from './tools.js'
+// Exported for unit tests that must not spawn specgraph (A4 set rules).
+export { auditChecklist, parseChecklist } from './checklist.js'
 
 export const name = __PLUGIN_NAME__
 

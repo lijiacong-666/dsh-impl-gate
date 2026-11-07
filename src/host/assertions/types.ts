@@ -2,6 +2,7 @@
 // Every id in checks/impl-gate.checks.json must have a landing here; ids whose
 // landing is still a stub are reported as NOT-RUN with NOT_IMPLEMENTED.
 import type { CheckItem } from '../checks.js'
+import type { ChecklistParse } from '../checklist.js'
 import type { RunOutput } from '../specgraph.js'
 
 export type AssertionStatus = 'PASS' | 'FAIL' | 'NOT-RUN'
@@ -18,7 +19,11 @@ export interface AssertionContext {
   slow: boolean
   timeoutMs: number
   checks: CheckItem[]
+  checklist: ChecklistParse
+  preGraphHashes: Record<string, string>
   run: (args: string[]) => Promise<RunOutput>
+  runArgv: (argv: string[]) => Promise<RunOutput>
+  hashGraph: () => Promise<Record<string, string>>
   newTempDir: (prefix: string) => Promise<string>
 }
 

@@ -2,11 +2,16 @@
 // landing below; check() reports NOT-RUN/NOT_IMPLEMENTED for ids without a
 // runnable implementation.
 import { checkA1 } from './a1.js'
+import { checkA2, checkA3, checkA4, checkA5 } from './input.js'
 import { checkQ10 } from './q10.js'
 import type { Assertion } from './types.js'
 
 export const ASSERTIONS: Readonly<Record<string, Assertion>> = {
   A1: checkA1,
+  A2: checkA2,
+  A3: checkA3,
+  A4: checkA4,
+  A5: checkA5,
   Q10: checkQ10,
 }
 

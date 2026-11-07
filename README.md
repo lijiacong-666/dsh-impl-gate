@@ -86,6 +86,10 @@ TODO：插件访问哪些网络地址、写入哪些文件、保存哪些凭据�
 
 见 [docs/compatibility.md](docs/compatibility.md)。
 
+## 偏离登记
+
+与执行清单或任务书不一致的实现决定统一登记在 [docs/deviations.md](docs/deviations.md)。
+
 ## 开发
 
 见 [docs/development.md](docs/development.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。使用 AI agent 开发、发布或维护时，让它先读 [AGENTS.md](AGENTS.md)。

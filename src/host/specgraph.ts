@@ -78,13 +78,22 @@ export function findSpecgraphHome(start: string): string | undefined {
 }
 
 export function runSpecgraph(runner: RunnerOptions, args: string[]): Promise<RunOutput> {
+  const executable = runner.argv[0]
+  if (executable === undefined) {
+    return Promise.reject(new SpecgraphError('E_PYTHON_MISSING', 'specgraphCommand resolved to an empty argv'))
+  }
+  return runProcess([executable, ...runner.argv.slice(1), ...args], runner)
+}
+
+/** Spawns one process with the shared timeout / exit-code / stdio policy. */
+export function runProcess(argv: string[], runner: Omit<RunnerOptions, 'argv'>): Promise<RunOutput> {
   return new Promise<RunOutput>((resolve, reject) => {
-    const executable = runner.argv[0]
+    const executable = argv[0]
     if (executable === undefined) {
-      reject(new SpecgraphError('E_PYTHON_MISSING', 'specgraphCommand resolved to an empty argv'))
+      reject(new SpecgraphError('E_PYTHON_MISSING', 'empty argv'))
       return
     }
-    const child = spawn(executable, [...runner.argv.slice(1), ...args], {
+    const child = spawn(executable, argv.slice(1), {
       cwd: runner.cwd !== undefined && runner.cwd.length > 0 ? runner.cwd : undefined,
       env: runner.env ?? process.env,
       windowsHide: true,

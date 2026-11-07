@@ -8,7 +8,16 @@ import path from 'node:path'
 import { ASSERTIONS } from './assertions/index.js'
 import type { AssertionContext } from './assertions/types.js'
 import { loadChecks, type CheckItem } from './checks.js'
-import { SpecgraphError, findSpecgraphHome, resolveArgv, runSpecgraph, type RunOutput } from './specgraph.js'
+import { loadChecklist } from './checklist.js'
+import { hashContractFiles } from './graph-hash.js'
+import {
+  SpecgraphError,
+  findSpecgraphHome,
+  resolveArgv,
+  runProcess,
+  runSpecgraph,
+  type RunOutput,
+} from './specgraph.js'
 
 export interface PluginConfig {
   specgraphCommand: string
@@ -92,7 +101,12 @@ function notRunReason(item: CheckItem, slow: boolean, implemented: boolean): str
 export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckPayload | ToolFailure> {
   const startedAt = new Date()
   const startedMs = Date.now()
-  const args = (rawArgs ?? {}) as { graphRoot?: unknown; implRoot?: unknown; slow?: unknown }
+  const args = (rawArgs ?? {}) as {
+    graphRoot?: unknown
+    implRoot?: unknown
+    slow?: unknown
+    checklistPath?: unknown
+  }
   const graphRootRaw = typeof args.graphRoot === 'string' ? args.graphRoot : ''
   if (graphRootRaw.length === 0) return fail('E_ROOT_MISSING', 'graphRoot is required')
   const graphRoot = path.resolve(graphRootRaw)
@@ -181,14 +195,39 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     return payload
   }
 
+  const checklistArg =
+    typeof args.checklistPath === 'string' && args.checklistPath.length > 0 ? args.checklistPath : ''
+  const checklistPath = path.resolve(
+    checklistArg.length > 0 ? checklistArg : path.join(implRoot, '.impl-gate', 'checklist.md'),
+  )
+  const checklist = loadChecklist(checklistPath)
+  const preGraphHashes = await hashContractFiles(graphRoot)
+
+  const runArgv = (argv: string[]): Promise<RunOutput> => {
+    const mapped = [...argv]
+    const head = mapped[0]
+    if (
+      head !== undefined &&
+      config.pythonPath.length > 0 &&
+      /^python(\d+(?:\.\d+)*)?(\.exe)?$/i.test(path.basename(head))
+    ) {
+      mapped[0] = config.pythonPath
+    }
+    return runProcess(mapped, { cwd: runner.cwd, env: runner.env, timeoutMs: config.timeoutMs })
+  }
+
   const ctx: AssertionContext = {
     graphRoot,
     implRoot,
     slow,
     timeoutMs: config.timeoutMs,
     checks,
+    checklist,
+    preGraphHashes,
     run: (specArgs: string[]) =>
       runSpecgraph({ argv: runner.argv, cwd: runner.cwd, env: runner.env, timeoutMs: config.timeoutMs }, specArgs),
+    runArgv,
+    hashGraph: () => hashContractFiles(graphRoot),
     newTempDir: (prefix: string) => fs.promises.mkdtemp(path.join(os.tmpdir(), prefix)),
   }
 
@@ -325,6 +364,10 @@ const checkParameters = {
     slow: {
       type: 'boolean',
       description: '运行 slow 断言（Q1 依赖审计）。默认关闭。',
+    },
+    checklistPath: {
+      type: 'string',
+      description: '交付的勾选表路径，缺省 <implRoot>/.impl-gate/checklist.md。',
     },
   },
   required: ['graphRoot'],
