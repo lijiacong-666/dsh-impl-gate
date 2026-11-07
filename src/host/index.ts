@@ -1,29 +1,69 @@
 // Host entry: runs in the DSH Node process. Bundled to lib/index.js as ESM.
-// Services from DSH (settings, tools, webServer, systemPrompt, ...) are
-// requested with ctx.inject so the plugin degrades when one is missing.
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { buildTools } from './tools.js'
+
+export { buildTools } from './tools.js'
 
 export const name = __PLUGIN_NAME__
 
-// Services this plugin cannot start without. Prefer ctx.inject([...], fn)
-// inside apply() for optional services.
-export const inject: string[] = []
+// `tools` is the only service this plugin needs; everything else is optional.
+export const inject: string[] = ['tools']
 
 export interface Config {
   enabled: boolean
+  specgraphCommand: string
+  pythonPath: string
+  specgraphCwd: string
+  timeoutMs: number
+  implRoot: string
+  slow: boolean
 }
 
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true).description('Enable the plugin.'),
+  specgraphCommand: z.string().default('python -m specgraph').description('specgraph 命令；默认 python -m specgraph。'),
+  pythonPath: z.string().default('').description('替换命令首个 python 词元；为空表示用 PATH 里的 python。'),
+  specgraphCwd: z.string().default('').description('运行 specgraph 子进程的工作目录；源码方式安装时指向 spec-graph 仓库。'),
+  timeoutMs: z.number().default(30000).description('单次 specgraph 调用超时（毫秒）。'),
+  implRoot: z.string().default('').description('实现根目录缺省值；为空时使用 graphRoot。'),
+  slow: z.boolean().default(false).description('默认是否运行 slow 断言。'),
 })
+
+interface RegisteredTool {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+  output: { schema: unknown; render: (args: unknown, value: unknown) => unknown }
+  execute: (args: unknown) => Promise<unknown>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    tools: { register(tool: RegisteredTool): (() => void) | void }
+  }
+}
 
 export function apply(ctx: Context, config: Config) {
   if (!config.enabled) return
 
-  // Everything registered in an effect is disposed when the plugin unloads.
+  const deps = {
+    config: {
+      specgraphCommand: config.specgraphCommand,
+      pythonPath: config.pythonPath,
+      specgraphCwd: config.specgraphCwd,
+      timeoutMs: config.timeoutMs,
+      implRoot: config.implRoot,
+      slow: config.slow,
+    },
+  }
+
   ctx.effect(() => {
-    console.info(`[${name}] ${__PLUGIN_VERSION__} loaded`)
-    return () => console.info(`[${name}] unloaded`)
+    const disposers = buildTools(deps).map((tool) => ctx.tools.register(tool))
+    return () => {
+      for (const dispose of disposers) {
+        if (typeof dispose === 'function') dispose()
+      }
+    }
   })
 }
