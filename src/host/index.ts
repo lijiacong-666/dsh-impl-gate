@@ -6,6 +6,8 @@ import { buildTools } from './tools.js'
 export { buildTools } from './tools.js'
 // Exported for unit tests that must not spawn specgraph (A4 set rules).
 export { auditChecklist, parseChecklist } from './checklist.js'
+// Exported for unit tests of the cached-run selectors (report / verify_contract).
+export { buildReport, buildVerifyContract, coverageStatement, rememberRun } from './tools.js'
 
 export const name = __PLUGIN_NAME__
 

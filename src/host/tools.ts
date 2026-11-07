@@ -47,29 +47,83 @@ export interface CheckPayload {
 const MAX_EVIDENCE = 2048
 const RUN_TTL_MS = 10 * 60 * 1000
 
+const errorSchema = {
+  type: 'object',
+  properties: {
+    code: { type: 'string' },
+    message: { type: 'string' },
+    detail: { type: 'string' },
+  },
+  required: ['code', 'message'],
+  additionalProperties: false,
+}
+
 interface RunRecord {
   payload: CheckPayload
   reasons: Record<string, string>
+  graphRoot: string
   finishedAt: number
 }
 
 const runs = new Map<string, RunRecord>()
 
-export function rememberRun(runId: string, payload: CheckPayload, reasons: Record<string, string>): void {
-  runs.set(runId, { payload, reasons, finishedAt: Date.now() })
+/** Windows paths are case-insensitive; key the cache on a canonical form. */
+export function normalizeRoot(root: string): string {
+  const resolved = path.resolve(root)
+  const unquoted = resolved.replace(/[\\/]+$/, '')
+  return process.platform === 'win32' ? unquoted.toLowerCase() : unquoted
+}
+
+export function rememberRun(
+  runId: string,
+  payload: CheckPayload,
+  reasons: Record<string, string>,
+  graphRoot: string,
+): void {
+  runs.set(runId, { payload, reasons, graphRoot: normalizeRoot(graphRoot), finishedAt: Date.now() })
   for (const [key, record] of runs) {
     if (Date.now() - record.finishedAt > RUN_TTL_MS) runs.delete(key)
   }
 }
 
-export function getRun(runId: string): RunRecord | null {
+type LookupResult =
+  | { kind: 'ok'; record: RunRecord }
+  | { kind: 'missing' }
+  | { kind: 'expired' }
+
+function lookupRun(runId: string): LookupResult {
   const record = runs.get(runId)
-  if (record === undefined) return null
+  if (record === undefined) return { kind: 'missing' }
   if (Date.now() - record.finishedAt > RUN_TTL_MS) {
     runs.delete(runId)
-    return null
+    return { kind: 'expired' }
   }
-  return record
+  return { kind: 'ok', record }
+}
+
+/** Latest live record for one root; never returns a record from another root. */
+function latestRunFor(root: string): LookupResult {
+  const wanted = normalizeRoot(root)
+  let best: RunRecord | undefined
+  let bestId = ''
+  for (const [runId, record] of runs) {
+    if (record.graphRoot !== wanted) continue
+    if (Date.now() - record.finishedAt > RUN_TTL_MS) {
+      runs.delete(runId)
+      continue
+    }
+    if (best === undefined || record.finishedAt > best.finishedAt) {
+      best = record
+      bestId = runId
+    }
+  }
+  if (best === undefined) return { kind: 'missing' }
+  return { kind: 'ok', record: { ...best, payload: { ...best.payload, runId: best.payload.runId || bestId } } }
+}
+
+export function getRun(runId: string): RunRecord | null {
+  const result = lookupRun(runId)
+  return result.kind === 'ok' ? result.record : null
 }
 
 function fail(code: string, message: string, detail?: string): ToolFailure {
@@ -191,7 +245,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     }
     const reasons: Record<string, string> = {}
     for (const item of checks) reasons[item.id] = 'D4_GRAPH_INVALID'
-    rememberRun(runId, payload, reasons)
+    rememberRun(runId, payload, reasons, graphRoot)
     return payload
   }
 
@@ -277,7 +331,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     evidence,
     durationMs: Date.now() - startedMs,
   }
-  rememberRun(runId, payload, reasons)
+  rememberRun(runId, payload, reasons, graphRoot)
   return payload
 }
 
@@ -298,15 +352,202 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
   return [{ type: 'text', text: lines.join('\n') }]
 }
 
-const errorSchema = {
+export interface ReportPayload {
+  summary: string
+  checklist: Array<{ id: string; status: string; evidence: string; reason?: string }>
+  uncovered: string[]
+}
+
+export interface VerifyPayload {
+  ok: boolean
+  details: string[]
+}
+
+function selectRun(rawRoot: unknown, rawRunId: unknown): { record: RunRecord } | ToolFailure {
+  const rootArg = typeof rawRoot === 'string' ? rawRoot.trim() : ''
+  if (rootArg.length === 0) return fail('E_ROOT_MISSING', 'root is required')
+  const root = path.resolve(rootArg)
+  const runId = typeof rawRunId === 'string' && rawRunId.length > 0 ? rawRunId : ''
+  if (runId.length > 0) {
+    const found = lookupRun(runId)
+    if (found.kind === 'missing') {
+      return fail('E_NO_PRIOR_RUN', `no cached run for runId ${runId}`, 'Run impl_gate_check first; the cache is in-memory and is lost on plugin reload.')
+    }
+    if (found.kind === 'expired') {
+      return fail('E_RUN_EXPIRED', `run ${runId} is older than the 10 minute TTL`, 'Run impl_gate_check again.')
+    }
+    if (found.record.graphRoot !== normalizeRoot(root)) {
+      return fail(
+        'E_NO_PRIOR_RUN',
+        `run ${runId} was produced for a different root`,
+        `cached root: ${found.record.graphRoot}; requested root: ${normalizeRoot(root)}`,
+      )
+    }
+    return { record: found.record }
+  }
+  const latest = latestRunFor(root)
+  if (latest.kind === 'missing') {
+    return fail('E_NO_PRIOR_RUN', `no cached run for root ${root}`, 'Run impl_gate_check first; the cache is in-memory and is lost on plugin reload.')
+  }
+  if (latest.kind === 'expired') return fail('E_RUN_EXPIRED', 'the cached run is older than the 10 minute TTL')
+  return { record: latest.record }
+}
+
+const A_IDS = ['A1', 'A2', 'A3', 'A4', 'A5'] as const
+
+function evidenceFor(payload: CheckPayload, id: string): string {
+  return payload.evidence.find((entry) => entry.id === id)?.text ?? ''
+}
+
+export function buildReport(rawArgs: unknown): ReportPayload | ToolFailure {
+  const args = (rawArgs ?? {}) as { root?: unknown; runId?: unknown }
+  const selected = selectRun(args.root, args.runId)
+  if ('error' in selected) return selected
+  const { payload, reasons } = selected.record
+
+  let order: string[]
+  try {
+    order = loadChecks().map((item) => item.id)
+  } catch {
+    order = [...payload.passed, ...payload.failed, ...payload.notRun]
+  }
+  const passed = new Set(payload.passed)
+  const failed = new Set(payload.failed)
+  const notRun = new Set(payload.notRun)
+
+  const checklist = order.map((id) => {
+    const status = passed.has(id) ? 'PASS' : failed.has(id) ? 'FAIL' : 'NOT-RUN'
+    const reason = status === 'NOT-RUN' ? reasons[id] ?? 'NOT_IMPLEMENTED' : undefined
+    const row: { id: string; status: string; evidence: string; reason?: string } = {
+      id,
+      status,
+      evidence: evidenceFor(payload, id),
+    }
+    if (reason !== undefined) row.reason = reason
+    return row
+  })
+
+  const uncovered = [...notRun]
+  const uncoveredMatches =
+    uncovered.length === notRun.size && uncovered.every((id) => notRun.has(id)) && checklist.length === 32
+  if (!uncoveredMatches) {
+    return fail(
+      'E_INTERNAL_INCONSISTENT',
+      '未覆盖集合与 NOT-RUN 集合不相等',
+      `uncovered=${uncovered.length}; notRun=${notRun.size}; rows=${checklist.length}`,
+    )
+  }
+  return {
+    summary: `PASS ${payload.passed.length} / FAIL ${payload.failed.length} / NOT-RUN ${payload.notRun.length} (32)`,
+    checklist,
+    uncovered,
+  }
+}
+
+/** The one line Step 4 requires: 未覆盖集合 ≡ NOT-RUN 集合（相等/不等）. */
+export function coverageStatement(rows: Array<{ id: string; status: string }>, uncovered: string[]): string {
+  const notRun = rows.filter((row) => row.status === 'NOT-RUN').map((row) => row.id)
+  const enough = rows.length === 32
+  const equal =
+    enough &&
+    notRun.length === uncovered.length &&
+    notRun.every((id) => uncovered.includes(id)) &&
+    uncovered.every((id) => notRun.includes(id))
+  return `未覆盖集合 ≡ NOT-RUN 集合（${equal ? '相等' : '不等'}）`
+}
+
+export function buildVerifyContract(rawArgs: unknown): VerifyPayload | ToolFailure {
+  const args = (rawArgs ?? {}) as { root?: unknown; runId?: unknown }
+  const selected = selectRun(args.root, args.runId)
+  if ('error' in selected) return selected
+  const { payload, reasons } = selected.record
+
+  const membership = new Map<string, number>()
+  for (const id of [...payload.passed, ...payload.failed, ...payload.notRun]) {
+    membership.set(id, (membership.get(id) ?? 0) + 1)
+  }
+  for (const id of A_IDS) {
+    if (membership.get(id) !== 1) {
+      return fail('E_INTERNAL_INCONSISTENT', `${id} does not appear exactly once in the cached run`)
+    }
+  }
+
+  const details = A_IDS.map((id) => {
+    const status = payload.passed.includes(id) ? 'PASS' : payload.failed.includes(id) ? 'FAIL' : 'NOT-RUN'
+    const evidence = evidenceFor(payload, id)
+    const reason = status === 'NOT-RUN' ? ` reason=${reasons[id] ?? 'NOT_IMPLEMENTED'}` : ''
+    return `${id} ${status}${reason} — ${evidence || '(no evidence)'}`
+  })
+  const ok = A_IDS.every((id) => payload.passed.includes(id))
+  return { ok, details }
+}
+
+function renderReport(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
+  const payload = value as Partial<ReportPayload & ToolFailure>
+  if (payload.error !== undefined) {
+    return [{ type: 'text', text: `impl_gate_report failed: ${payload.error.code} — ${payload.error.message}` }]
+  }
+  const lines = [
+    payload.summary ?? '',
+    coverageStatement(payload.checklist ?? [], payload.uncovered ?? []),
+  ]
+  const failed = (payload.checklist ?? []).filter((row) => row.status === 'FAIL').map((row) => row.id)
+  if (failed.length > 0) lines.push(`FAIL: ${failed.join(', ')}`)
+  return [{ type: 'text', text: lines.filter((line) => line.length > 0).join('\n') }]
+}
+
+function renderVerify(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
+  const payload = value as Partial<VerifyPayload & ToolFailure>
+  if (payload.error !== undefined) {
+    return [{ type: 'text', text: `impl_gate_verify_contract failed: ${payload.error.code} — ${payload.error.message}` }]
+  }
+  const lines = [`ok=${payload.ok === true}`]
+  for (const detail of payload.details ?? []) lines.push(detail)
+  return [{ type: 'text', text: lines.join('\n') }]
+}
+
+const reportOutputSchema = {
   type: 'object',
-  properties: {
-    code: { type: 'string' },
-    message: { type: 'string' },
-    detail: { type: 'string' },
-  },
-  required: ['code', 'message'],
   additionalProperties: false,
+  properties: {
+    summary: { type: 'string' },
+    checklist: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          status: { type: 'string' },
+          evidence: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['id', 'status', 'evidence'],
+        additionalProperties: false,
+      },
+    },
+    uncovered: { type: 'array', items: { type: 'string' } },
+    error: errorSchema,
+  },
+}
+
+const verifyOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ok: { type: 'boolean' },
+    details: { type: 'array', items: { type: 'string' } },
+    error: errorSchema,
+  },
+}
+
+const runSelectorParameters = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    root: { type: 'string', description: '检查根（graphRoot）的绝对路径。必填。' },
+    runId: { type: 'string', description: '前次 impl_gate_check 的 runId；缺省取该根最近一次运行。' },
+  },
+  required: ['root'],
 }
 
 const checkOutputSchema = {
@@ -398,33 +639,37 @@ export function buildTools(deps: ToolDeps) {
     },
   }
 
-  const stub = (name: string, description: string) => ({
-    name,
-    description,
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        root: { type: 'string', description: '规格图谱根目录。' },
-        runId: { type: 'string', description: 'impl_gate_check 返回的 runId；缺省表示最近一次运行。' },
-      },
-      required: ['root'],
+  const report = {
+    name: 'impl_gate_report',
+    description:
+      'Summarise a previous impl_gate_check run as PASS/FAIL/NOT-RUN per assertion, reusing that run\'s cached results. ' +
+      'Does not re-run checks, does not do GUI checks and does not render a canvas.',
+    parameters: runSelectorParameters,
+    output: { schema: reportOutputSchema, render: renderReport },
+    async execute(args: unknown) {
+      try {
+        return buildReport(args)
+      } catch (error) {
+        return failureFrom(error)
+      }
     },
-    output: {
-      schema: stubOutputSchema,
-      render: (_args: unknown, value: unknown) => {
-        const v = value as ToolFailure
-        return [{ type: 'text' as const, text: `${name} is not implemented yet: ${v.error?.code ?? 'E_NOT_IMPLEMENTED'}` }]
-      },
-    },
-    async execute(_args: unknown) {
-      return fail('E_NOT_IMPLEMENTED', `${name} ships in Step 4; use impl_gate_check for now`)
-    },
-  })
+  }
 
-  return [
-    check,
-    stub('impl_gate_report', 'Summarise a previous impl_gate_check run as PASS/FAIL/NOT-RUN per assertion. Does not re-run checks.'),
-    stub('impl_gate_verify_contract', 'Check that A1–A5 passed in one previous impl_gate_check run. Does not re-run checks.'),
-  ]
+  const verify = {
+    name: 'impl_gate_verify_contract',
+    description:
+      'Check that A1–A5 passed in one previous impl_gate_check run, reusing that run\'s cached results. ' +
+      'Does not re-run checks, does not do GUI checks and does not render a canvas.',
+    parameters: runSelectorParameters,
+    output: { schema: verifyOutputSchema, render: renderVerify },
+    async execute(args: unknown) {
+      try {
+        return buildVerifyContract(args)
+      } catch (error) {
+        return failureFrom(error)
+      }
+    },
+  }
+
+  return [check, report, verify]
 }

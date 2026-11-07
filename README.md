@@ -44,6 +44,25 @@ dsh plugin --profile headless add github:mofei/dsh-impl-gate#v0.1.0
 
 1. TODO：首次使用的步骤，写出界面上真实的中文名称，例如 **设置 → 插件 → Impl Gate**。
 
+## 勾选表格式
+
+交付的勾选表默认位于 `<implRoot>/.impl-gate/checklist.md`，必须是四列表格：
+
+| id | status | evidence | reason |
+|---|---|---|---|
+| A1 | PASS | command: python -m specgraph export 支付服务 --root <graphRoot> --out <tmp>; exit: 0 |  |
+
+- `status` 只能是 `PASS`、`FAIL`、`NOT-RUN`。
+- `evidence` 必须以 `command:` 或 `file:` 开头；`command:` 要带 `exit: <code>`，`file:` 要带 `:line`。
+- `reason` 仅在 `NOT-RUN` 时必填，且取自错误码表；其余状态留空。
+- 共 32 行，id 不重不漏；未通过的条目还要列进 `## 未覆盖` 段。
+
+完整说明在 Step 6 补齐。
+
+## 缓存与重跑
+
+`impl_gate_report` 与 `impl_gate_verify_contract` 复用 `impl_gate_check` 留在进程内的结果（按 runId + 规范化根目录，TTL 10 分钟）。插件热重载会清空缓存，此时返回 `E_NO_PRIOR_RUN` 属于正常现象——重跑一次 `impl_gate_check` 即可。
+
 ## 配置
 
 | 键        | 默认值 | 说明       |
