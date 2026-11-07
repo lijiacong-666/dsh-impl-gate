@@ -85,6 +85,22 @@ const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test'])
 
 type Json = Record<string, unknown>
 
+/**
+ * Recursively drop `_`-prefixed keys (template hints). Used by validation,
+ * materialization and rendering so a hint can live at any depth — including
+ * inside array elements such as `modules[0].exposes[0]._hint`.
+ */
+export function stripMeta(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((entry) => stripMeta(entry))
+  if (value === null || typeof value !== 'object') return value
+  const out: Json = {}
+  for (const [key, entry] of Object.entries(value as Json)) {
+    if (key.startsWith('_')) continue
+    out[key] = stripMeta(entry)
+  }
+  return out
+}
+
 function isRecord(value: unknown): value is Json {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -369,8 +385,9 @@ function findCycle(modules: Array<{ id: string; requires: Array<{ module: string
   return null
 }
 
-export function validatePlan(raw: unknown): PlanValidation {
+export function validatePlan(rawInput: unknown): PlanValidation {
   const problems: PlanProblem[] = []
+  const raw = stripMeta(rawInput)
   if (!isRecord(raw)) {
     return { plan: null, problems: [{ code: 'PLAN_INVALID', path: '', message: 'plan must be a JSON object' }] }
   }
@@ -515,10 +532,34 @@ export function emptyPlan(input: { name?: string; stack?: string }): Json {
   }
 }
 
-/** Slots the model still has to fill, per module, e.g. `M3: exposes, acceptance`. */
-export function missingSlots(raw: unknown): string[] {
-  const modules = isRecord(raw) && Array.isArray(raw.modules) ? raw.modules : []
+/**
+ * Slots the model still has to fill, in two levels:
+ *   "plan: title, summary, stack, goals, data, deliverables"
+ *   "M1: dir, responsibility, exposes, constraints, files, acceptance"
+ * `nonGoals` and `boundaries` are optional in v1 and therefore never reported.
+ */
+export function missingSlots(rawInput: unknown): string[] {
+  const raw = stripMeta(rawInput)
   const out: string[] = []
+  const rec = isRecord(raw) ? raw : {}
+
+  const planMissing: string[] = []
+  if (typeof rec.title !== 'string' || rec.title.trim().length === 0) planMissing.push('title')
+  if (typeof rec.summary !== 'string' || rec.summary.trim().length === 0) planMissing.push('summary')
+  if (typeof rec.stack !== 'string' || rec.stack.trim().length === 0) planMissing.push('stack')
+  if (!Array.isArray(rec.goals) || rec.goals.length === 0) planMissing.push('goals')
+  if (!Array.isArray(rec.data) || rec.data.length === 0) planMissing.push('data')
+  const deliverables = isRecord(rec.deliverables) ? rec.deliverables : {}
+  const tree = typeof deliverables.tree === 'string' ? deliverables.tree.trim() : ''
+  const files = Array.isArray(deliverables.files) ? deliverables.files : []
+  if (tree.length === 0 || files.length === 0) planMissing.push('deliverables')
+  if (planMissing.length > 0) out.push(`plan: ${planMissing.join(', ')}`)
+
+  const modules = Array.isArray(rec.modules) ? rec.modules : []
+  if (modules.length === 0) {
+    out.push('plan: modules（至少 1 个）')
+    return out
+  }
   modules.forEach((module, index) => {
     const id = isRecord(module) && typeof module.id === 'string' && module.id.length > 0 ? module.id : `#${index}`
     const missing: string[] = []

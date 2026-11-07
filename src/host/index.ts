@@ -9,8 +9,12 @@ export { auditChecklist, parseChecklist } from './checklist.js'
 // Exported for unit tests of the cached-run selectors (report / verify_contract).
 export { buildReport, buildVerifyContract, coverageStatement, rememberRun, runCheck, buildCompose } from './tools.js'
 // Exported for unit tests of the compose plan schema (G1) without a host.
-export { emptyPlan, missingSlots, validatePlan } from './compose/plan.js'
+export { emptyPlan, missingSlots, validatePlan, stripMeta } from './compose/plan.js'
 export { renderDraft } from './compose/draft.js'
+export { renderGraphToml, renderModuleSpec, findExposeIndex } from './compose/graph.js'
+export { renderSpecDoc } from './compose/spec-doc.js'
+export { materializePlan } from './compose/materialize.js'
+export { computeWaves } from './init/waves.js'
 // Exported for unit tests of the Step 5 replay gate (no config toggle needed).
 export { makeReplayCheck, parseReplayEvidence } from './assertions/exec.js'
 // Exported for unit tests of A2/A3 checklist validation.

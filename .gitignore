@@ -22,3 +22,6 @@ artifacts/
 # RED working records are local-only.
 .research/
 .evolve/
+
+# Local fixtures and harnesses for compose cards (never shipped).
+_probe/

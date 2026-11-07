@@ -10,6 +10,7 @@ import type { AssertionContext } from './assertions/types.js'
 import { loadChecks, type CheckItem } from './checks.js'
 import { loadChecklist } from './checklist.js'
 import { renderDraft } from './compose/draft.js'
+import { materializePlan } from './compose/materialize.js'
 import { emptyPlan, missingSlots, type PlanProblem } from './compose/plan.js'
 import { hashContractFiles } from './graph-hash.js'
 import {
@@ -518,13 +519,27 @@ export interface ComposePayload {
   draftPath: string
   missingSlots: string[]
   problems: PlanProblem[]
+  graphRoot?: string
+  specMd?: string
+  packageMd?: string
+  manifestPath?: string
+  files?: string[]
+  waves?: Array<{ index: number; modules: string[]; dependsOn: string[] }>
+  overlaps?: Array<{ a: string; b: string; files: string[] }>
+}
+
+export interface ComposeFailure extends ToolFailure {
+  problems?: PlanProblem[]
+  issues?: unknown[]
+  graphExitCode?: number
 }
 
 /**
  * `mode: "plan"` only writes compose-plan.json and SPEC-DRAFT.md.
- * It never calls specgraph and never touches spec.md / graph.toml.
+ * `mode: "materialize"` writes the spec-graph root, nine-section SPEC.md and
+ * the export/ package, then validates the graph with `python -m specgraph check`.
  */
-export async function buildCompose(rawArgs: unknown): Promise<ComposePayload | ToolFailure> {
+export async function buildCompose(rawArgs: unknown, config: PluginConfig): Promise<ComposePayload | ComposeFailure> {
   const args = (rawArgs ?? {}) as {
     outDir?: unknown
     requirement?: unknown
@@ -538,7 +553,35 @@ export async function buildCompose(rawArgs: unknown): Promise<ComposePayload | T
 
   const mode = args.mode === 'materialize' ? 'materialize' : 'plan'
   if (mode === 'materialize') {
-    return fail('E_NOT_IMPLEMENTED', 'materialize is not part of G1; only mode "plan" exists yet')
+    const outcome = await materializePlan(outDirRaw, config)
+    if (outcome.ok) {
+      return {
+        ok: true,
+        mode: 'materialize',
+        planPath: path.join(path.resolve(outDirRaw), 'compose-plan.json'),
+        draftPath: '',
+        missingSlots: [],
+        problems: [],
+        graphRoot: outcome.graphRoot,
+        specMd: outcome.specMd,
+        packageMd: outcome.packageMd,
+        manifestPath: outcome.manifestPath,
+        files: outcome.files,
+        waves: outcome.waves,
+        overlaps: outcome.overlaps,
+      }
+    }
+    const failure: ComposeFailure = {
+      error: {
+        code: outcome.code,
+        message: outcome.message,
+        ...(outcome.detail === undefined ? {} : { detail: outcome.detail }),
+      },
+    }
+    if (outcome.problems !== undefined) failure.problems = outcome.problems
+    if (outcome.issues !== undefined) failure.issues = outcome.issues
+    if (outcome.graphExitCode !== undefined) failure.graphExitCode = outcome.graphExitCode
+    return failure
   }
 
   const outDir = path.resolve(outDirRaw)
@@ -583,9 +626,35 @@ export async function buildCompose(rawArgs: unknown): Promise<ComposePayload | T
 }
 
 function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
-  const payload = value as Partial<ComposePayload & ToolFailure>
+  const payload = value as Partial<ComposePayload & ComposeFailure>
   if (payload.error !== undefined) {
-    return [{ type: 'text', text: `impl_gate_compose failed: ${payload.error.code} — ${payload.error.message}` }]
+    const lines = [`impl_gate_compose failed: ${payload.error.code} — ${payload.error.message}`]
+    if (payload.problems !== undefined && payload.problems.length > 0) {
+      lines.push(`problems (${payload.problems.length}):`)
+      for (const entry of payload.problems) lines.push(`- ${entry.path || '/'}: ${entry.message}`)
+    }
+    if (payload.issues !== undefined && payload.issues.length > 0) {
+      lines.push(`graph issues (${payload.issues.length}, unchanged from specgraph):`)
+      for (const issue of payload.issues) lines.push(`- ${JSON.stringify(issue)}`)
+    }
+    if (payload.error.detail !== undefined) lines.push(payload.error.detail)
+    return [{ type: 'text', text: lines.join('\n') }]
+  }
+  if (payload.mode === 'materialize') {
+    const waves = (payload.waves ?? []).map((wave) => `wave ${wave.index}: ${wave.modules.join(', ')}`).join(' | ')
+    const overlaps = payload.overlaps ?? []
+    const lines = [
+      `impl_gate_compose materialize: ${payload.graphRoot ?? ''}`,
+      `spec: ${payload.specMd ?? ''}`,
+      `package: ${payload.packageMd ?? ''}`,
+      `manifest: ${payload.manifestPath ?? ''}`,
+      `files (${payload.files?.length ?? 0}): ${(payload.files ?? []).join(', ')}`,
+      waves.length > 0 ? waves : 'waves: none',
+    ]
+    if (overlaps.length > 0) {
+      lines.push(`overlaps (${overlaps.length}): ${overlaps.map((entry) => `${entry.a}/${entry.b}: ${entry.files.join(', ')}`).join(' | ')}`)
+    }
+    return [{ type: 'text', text: lines.join('\n') }]
   }
   const slots = payload.missingSlots ?? []
   const lines = [`impl_gate_compose ${payload.mode ?? ''}: ${payload.planPath ?? ''}`, `draft: ${payload.draftPath ?? ''}`]
@@ -758,6 +827,56 @@ const composeOutputSchema = {
         additionalProperties: false,
       },
     },
+    graphRoot: { type: 'string' },
+    specMd: { type: 'string' },
+    packageMd: { type: 'string' },
+    manifestPath: { type: 'string' },
+    files: { type: 'array', items: { type: 'string' } },
+    waves: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          index: { type: 'number' },
+          modules: { type: 'array', items: { type: 'string' } },
+          dependsOn: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['index', 'modules', 'dependsOn'],
+        additionalProperties: false,
+      },
+    },
+    overlaps: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          a: { type: 'string' },
+          b: { type: 'string' },
+          files: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['a', 'b', 'files'],
+        additionalProperties: false,
+      },
+    },
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          level: { type: 'string' },
+          code: { type: 'string' },
+          node: { type: 'string' },
+          section: { type: 'string' },
+          item: { type: 'string' },
+          message: { type: 'string' },
+          fix: { type: 'string' },
+          file: { type: 'string' },
+          line: { type: 'number' },
+        },
+        additionalProperties: false,
+      },
+    },
+    graphExitCode: { type: 'number' },
     error: errorSchema,
   },
 }
@@ -815,14 +934,16 @@ export function buildTools(deps: ToolDeps) {
   const compose = {
     name: 'impl_gate_compose',
     description:
-      'Turn a requirement into a施工文档 scaffold. mode "plan" writes compose-plan.json (the only place content lives) ' +
-      'and SPEC-DRAFT.md with explicit TODO slots. It never invents content, never calls specgraph and never writes ' +
-      'spec.md/graph.toml; materialize is not available in this card.',
+      'Turn a requirement into a施工文档 chain. mode "plan" writes compose-plan.json (the only place content lives) and ' +
+      'SPEC-DRAFT.md with explicit TODO slots. mode "materialize" writes <outDir>/<name>/graph.toml + per-module spec.md, ' +
+      'a nine-section SPEC.md beside <name>/, and export/export.md + export/manifest.json, then validates the graph with ' +
+      '`python -m specgraph check`; an invalid ' +
+      'graph returns GRAPH_INVALID with specgraph issues unchanged. It never invents content and never does GUI/canvas work.',
     parameters: composeParameters,
     output: { schema: composeOutputSchema, render: renderCompose },
     async execute(args: unknown) {
       try {
-        return await buildCompose(args)
+        return await buildCompose(args, deps.config)
       } catch (error) {
         return failureFrom(error)
       }

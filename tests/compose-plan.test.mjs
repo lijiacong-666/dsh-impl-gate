@@ -133,7 +133,10 @@ test('mode plan writes the template and the draft, and nothing else', async () =
   assert.equal(result.mode, 'plan')
   assert.equal(result.planPath, path.join(outDir, 'compose-plan.json'))
   assert.equal(result.draftPath, path.join(outDir, 'SPEC-DRAFT.md'))
-  assert.deepEqual(result.missingSlots, ['M1: dir, responsibility, exposes, constraints, files, acceptance'])
+  assert.deepEqual(result.missingSlots, [
+    'plan: title, summary, stack, goals, data, deliverables',
+    'M1: dir, responsibility, exposes, constraints, files, acceptance',
+  ])
   assert.ok(fs.existsSync(result.planPath))
   assert.ok(fs.existsSync(result.draftPath))
   assert.ok(!fs.existsSync(path.join(outDir, 'spec.md')))
@@ -174,9 +177,9 @@ test('a non-empty outDir needs overwrite:true', async () => {
   assert.ok(fs.existsSync(path.join(outDir, 'keep.txt')))
 })
 
-test('materialize is not implemented in G1', async () => {
+test('materialize without a compose-plan.json returns E_PLAN_MISSING', async () => {
   const result = await buildCompose({ outDir: tempDir(), mode: 'materialize' })
-  assert.equal(result.error.code, 'E_NOT_IMPLEMENTED')
+  assert.equal(result.error.code, 'E_PLAN_MISSING')
 })
 
 test('missingSlots reflects a partially filled module', () => {
