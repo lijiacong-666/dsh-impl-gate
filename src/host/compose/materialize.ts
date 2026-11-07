@@ -5,7 +5,13 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { findSpecgraphHome, resolveArgv, runProcess, SpecgraphError } from '../specgraph.js'
+import {
+  preflightSpecgraph,
+  resolveSpecgraphEnv,
+  runProcess,
+  SpecgraphError,
+  type SpecgraphEnv,
+} from '../specgraph.js'
 import type { Plan, PlanProblem } from './plan.js'
 import { validatePlan } from './plan.js'
 import { renderGraphToml, renderModuleSpec } from './graph.js'
@@ -17,6 +23,8 @@ export interface MaterializeConfig {
   pythonPath: string
   specgraphCwd: string
   timeoutMs: number
+  /** Used only as a walk-up start for the specgraph home. */
+  implRoot?: string
 }
 
 export interface MaterializePayload {
@@ -98,20 +106,13 @@ function fromError(error: unknown): MaterializeFailure {
   return failure('E_INTERNAL', (error as Error).message)
 }
 
-function pythonRunner(config: MaterializeConfig, start: string) {
-  const home = config.specgraphCwd.length > 0
-    ? path.resolve(config.specgraphCwd)
-    : findSpecgraphHome(start) ?? findSpecgraphHome(process.cwd())
-  const env = { ...process.env }
-  if (home !== undefined) {
-    env.PYTHONPATH = env.PYTHONPATH === undefined ? home : `${home}${path.delimiter}${env.PYTHONPATH}`
-  }
-  return {
-    argv: resolveArgv(config.specgraphCommand, config.pythonPath),
-    cwd: home,
-    env,
-    timeoutMs: config.timeoutMs,
-  }
+function buildEnv(config: MaterializeConfig, outDir: string): SpecgraphEnv {
+  return resolveSpecgraphEnv({
+    command: config.specgraphCommand,
+    pythonPath: config.pythonPath,
+    home: config.specgraphCwd,
+    startDirs: [config.implRoot ?? '', outDir],
+  })
 }
 
 function parseJson(text: string): unknown {
@@ -126,18 +127,30 @@ function parseJson(text: string): unknown {
 
 /** Copies the two files specgraph wrote into a temp dir and returns their text. */
 async function runExport(
-  config: MaterializeConfig,
+  environment: SpecgraphEnv,
+  timeoutMs: number,
   graphRoot: string,
   moduleDir: string,
 ): Promise<{ md: string; manifest: unknown }> {
   const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'impl-gate-export-'))
   try {
-    const runner = pythonRunner(config, graphRoot)
-    const output = await runProcess([...runner.argv, 'export', moduleDir, '--root', graphRoot, '--out', tmp], runner)
+    const output = await runProcess([...environment.argv, 'export', moduleDir, '--root', graphRoot, '--out', tmp], {
+      cwd: environment.cwd,
+      env: environment.env,
+      timeoutMs,
+    })
     if (output.exitCode !== 0) {
+      const parsed = parseJson(output.stdout) as { issues?: unknown } | undefined
+      if (parsed !== undefined && Array.isArray(parsed.issues)) {
+        throw new SpecgraphError(
+          'GRAPH_INVALID',
+          `specgraph export failed for "${moduleDir}" (exit ${output.exitCode})`,
+          output.stderr.slice(-4096) || output.stdout.slice(-4096),
+        )
+      }
       throw new SpecgraphError(
-        'GRAPH_INVALID',
-        `specgraph export failed for "${moduleDir}" (exit ${output.exitCode})`,
+        'PYTHON_ENV_MISSING',
+        `python could not run specgraph export for "${moduleDir}" (exit ${output.exitCode}); check PYTHONPATH or specgraphCwd`,
         output.stderr.slice(-4096) || output.stdout.slice(-4096),
       )
     }
@@ -208,6 +221,15 @@ export async function materializePlan(
     )
   }
 
+  // Resolve and prove the python environment before writing anything, so a
+  // missing specgraph package leaves outDir exactly as it was.
+  const environment = buildEnv(config, outDir)
+  try {
+    await preflightSpecgraph(environment, config.timeoutMs)
+  } catch (error) {
+    return fromError(error)
+  }
+
   // SPEC.md must live OUTSIDE the graph root: spec-graph treats any spec.md in
   // the root (case-insensitively on Windows) as the root node and rejects the
   // human document (language names, file paths, code blocks).
@@ -227,7 +249,7 @@ export async function materializePlan(
   // Written before `check` so a failed run can be fixed and re-run in place.
   await writeOwnership(outDir, generated)
 
-  const runner = pythonRunner(config, target)
+  const runner = { argv: environment.argv, cwd: environment.cwd, env: environment.env, timeoutMs: config.timeoutMs }
   let checkOutput
   try {
     checkOutput = await runProcess([...runner.argv, 'check', target, '--json'], runner)
@@ -237,6 +259,13 @@ export async function materializePlan(
   const checkJson = parseJson(checkOutput.stdout) as { ok?: unknown; issues?: unknown } | undefined
   if (checkOutput.exitCode !== 0 || checkJson?.ok !== true) {
     const issues = Array.isArray(checkJson?.issues) ? checkJson.issues : []
+    if (checkOutput.exitCode !== 0 && (checkJson === undefined || !Array.isArray(checkJson.issues))) {
+      return failure(
+        'PYTHON_ENV_MISSING',
+        `python could not run specgraph check (exit ${checkOutput.exitCode}); check PYTHONPATH or specgraphCwd`,
+        `${checkOutput.stderr}\n${checkOutput.stdout}`.trim().slice(-4096) || undefined,
+      )
+    }
     return {
       ...failure(
         'GRAPH_INVALID',
@@ -252,7 +281,7 @@ export async function materializePlan(
   const exports: Array<{ dir: string; md: string; manifest: unknown }> = []
   for (const module of plan.modules) {
     try {
-      const result = await runExport(config, target, module.dir)
+      const result = await runExport(environment, config.timeoutMs, target, module.dir)
       exports.push({ dir: module.dir, ...result })
     } catch (error) {
       return fromError(error)

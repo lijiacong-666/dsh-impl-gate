@@ -85,6 +85,110 @@ export function runSpecgraph(runner: RunnerOptions, args: string[]): Promise<Run
   return runProcess([executable, ...runner.argv.slice(1), ...args], runner)
 }
 
+export interface SpecgraphEnvInput {
+  /** Full command line, e.g. `python -m specgraph`. */
+  command: string
+  /** Optional interpreter override for a `python …` command. */
+  pythonPath: string
+  /** Tool argument or plan field; wins over every other source. */
+  home?: string
+  /** Walk-up starts, in priority order (normally implRoot, then outDir). */
+  startDirs?: string[]
+  env?: NodeJS.ProcessEnv
+}
+
+export interface SpecgraphEnv {
+  argv: string[]
+  cwd?: string
+  env: NodeJS.ProcessEnv
+  home?: string
+  probed: string[]
+}
+
+/**
+ * Resolves the python environment shared by `impl_gate_check` and
+ * `impl_gate_compose` materialize:
+ *   explicit home > walk-up from startDirs > SPECGRAPH_HOME.
+ * A home always sets PYTHONPATH so an uninstalled source checkout works.
+ */
+export function resolveSpecgraphEnv(input: SpecgraphEnvInput): SpecgraphEnv {
+  const baseEnv = input.env ?? process.env
+  const probed: string[] = []
+  let home: string | undefined
+  const explicit = input.home?.trim() ?? ''
+  if (explicit.length > 0) {
+    home = path.resolve(explicit)
+    probed.push(home)
+  }
+  if (home === undefined) {
+    for (const start of input.startDirs ?? []) {
+      if (start === undefined || start.trim().length === 0) continue
+      probed.push(path.resolve(start))
+      const found = findSpecgraphHome(start)
+      if (found !== undefined) {
+        home = found
+        probed.push(found)
+        break
+      }
+    }
+  }
+  if (home === undefined) {
+    const fromEnv = baseEnv.SPECGRAPH_HOME
+    if (fromEnv !== undefined && fromEnv.length > 0) {
+      probed.push(`SPECGRAPH_HOME=${fromEnv}`)
+      if (fs.existsSync(path.join(fromEnv, 'specgraph', '__init__.py'))) home = path.resolve(fromEnv)
+    }
+  }
+  const env: NodeJS.ProcessEnv = { ...baseEnv }
+  if (home !== undefined) {
+    const existing = env.PYTHONPATH
+    env.PYTHONPATH = existing === undefined || existing.length === 0 ? home : `${home}${path.delimiter}${existing}`
+  }
+  return { argv: resolveArgv(input.command, input.pythonPath), cwd: home, env, home, probed }
+}
+
+function importArgv(argv: string[]): string[] {
+  for (let index = 0; index < argv.length - 1; index += 1) {
+    if (argv[index] === '-m' && argv[index + 1] === 'specgraph') {
+      return [...argv.slice(0, index), '-c', 'import specgraph']
+    }
+  }
+  return [...argv, '-c', 'import specgraph']
+}
+
+/**
+ * Runs `python -c "import specgraph"` before any file is written. The first
+ * attempt deliberately drops PYTHONPATH; the second retries with the resolved
+ * home. Two failures mean the interpreter cannot see specgraph at all.
+ */
+export async function preflightSpecgraph(environment: SpecgraphEnv, timeoutMs: number): Promise<void> {
+  const argv = importArgv(environment.argv)
+  const attempts: NodeJS.ProcessEnv[] = []
+  const bare = { ...environment.env }
+  delete bare.PYTHONPATH
+  attempts.push(bare)
+  if (environment.home !== undefined) {
+    attempts.push({ ...environment.env, PYTHONPATH: environment.home })
+  }
+  let lastError = ''
+  for (const env of attempts) {
+    try {
+      const output = await runProcess(argv, { cwd: environment.cwd, env, timeoutMs })
+      if (output.exitCode === 0) return
+      lastError = `${output.stderr}\n${output.stdout}`.trim()
+    } catch (error) {
+      lastError = (error as Error).message
+    }
+  }
+  throw new SpecgraphError(
+    'PYTHON_ENV_MISSING',
+    `python cannot import specgraph; set PYTHONPATH to the spec-graph root or configure specgraphCwd (probed: ${
+      environment.probed.length > 0 ? environment.probed.join(', ') : 'none'
+    })`,
+    lastError.slice(-2000),
+  )
+}
+
 /** Spawns one process with the shared timeout / exit-code / stdio policy. */
 export function runProcess(argv: string[], runner: Omit<RunnerOptions, 'argv'>): Promise<RunOutput> {
   return new Promise<RunOutput>((resolve, reject) => {

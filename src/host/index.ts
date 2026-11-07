@@ -14,6 +14,7 @@ export { renderDraft } from './compose/draft.js'
 export { renderGraphToml, renderModuleSpec, findExposeIndex } from './compose/graph.js'
 export { renderSpecDoc } from './compose/spec-doc.js'
 export { materializePlan } from './compose/materialize.js'
+export { resolveSpecgraphEnv, preflightSpecgraph } from './specgraph.js'
 export { computeWaves } from './init/waves.js'
 // Exported for unit tests of the Step 5 replay gate (no config toggle needed).
 export { makeReplayCheck, parseReplayEvidence } from './assertions/exec.js'

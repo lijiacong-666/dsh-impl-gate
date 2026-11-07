@@ -1,4 +1,4 @@
-﻿# 偏离登记（Deviations）
+# 偏离登记（Deviations）
 
 本文件是偏离的**唯一维护位置**；`TASK-dsh-impl-gate-v1.md` §10 的表与这里内容必须一致，只改一处视为不合格。
 
@@ -16,6 +16,7 @@
 | D-10 | B3/B4/B6 固定 NOT-RUN，reason 依次 `EVIDENCE_TOKEN_UNSPECIFIED` / `MANUAL_REVIEW_REQUIRED` / `HUMAN_PROCESS_REQUIRED` | 语义检索、裁决记录、流程纪律无法机械判定 | 已批（用户 m01090） |
 | D-11 | B1/B2/B5/B7 判定口径改为：mapping.md 覆盖全部「需要」条目 / 勾选表 id ⊆ checks.json id / mapping 每模块≥1 行且模块真实 / FAIL 行带 `repro:` | 清单原文 B1/B2/B5/B7 的最低断言偏流程（导出符号、git 历史），v1 取可机械判定的代理口径 | 已批（用户 m01090） |
 | D-12 | `pythonPath` 优先级实际为 配置 > PATH；DSH 捆绑解释器不自动探测，需在 `pythonPath` 手填绝对路径 | 宿主未暴露稳定的捆绑解释器路径，自动回退可能选错解释器 | 已按实际行为关闭 |
+| D-13 | `SPEC.md` 位于 `<outDir>/SPEC.md` 而非 graphRoot 内；ownership 会登记它，spec-graph 的 check 看不到它 | Windows 大小写不敏感，graphRoot 内的 `SPEC.md` 会被当成根节点 `spec.md`，触发 SECTION_MISSING / IMPL_LANGUAGE 等 9 条误报 | 已按实际行为关闭 |
 
 ## 维护规则
 

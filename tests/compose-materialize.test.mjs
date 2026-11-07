@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -201,4 +202,121 @@ test('spec doc: nine numbered sections in order, empty sections say （无）', 
   assert.match(doc, /### 非目标\n（无）/)
   assert.match(doc, /## 4 数据结构\n\n（无）/)
   assert.match(doc, /（无跨模块依赖）/)
+})
+const winOnly = process.platform === 'win32'
+
+function writeFakePython(dir, lines) {
+  const file = path.join(dir, 'fake-python.cmd')
+  fs.writeFileSync(file, lines.join('\r\n') + '\r\n')
+  return file
+}
+
+function tempOut(plan) {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-env-'))
+  fs.writeFileSync(path.join(out, 'compose-plan.json'), JSON.stringify(plan))
+  return out
+}
+
+function listing(dir) {
+  return fs.readdirSync(dir, { recursive: true }).map((entry) => String(entry).split(path.sep).join('/')).sort()
+}
+
+test('missing specgraph package is PYTHON_ENV_MISSING and writes nothing', { skip: !winOnly && 'fake python wrapper is cmd-only' }, async () => {
+  const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-fakepy-'))
+  const fake = writeFakePython(fakeDir, ['@echo off', 'echo No module named specgraph 1>&2', 'exit /b 1'])
+  const out = tempOut(basePlan())
+  const before = listing(out)
+  try {
+    const result = await materializePlan(out, {
+      specgraphCommand: `cmd /d /c "${fake}" -m specgraph`,
+      pythonPath: '',
+      specgraphCwd: '',
+      timeoutMs: 5000,
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.code, 'PYTHON_ENV_MISSING')
+    assert.match(result.message, /python cannot import specgraph; set PYTHONPATH to the spec-graph root or configure specgraphCwd \(probed: /)
+    assert.deepEqual(listing(out), before)
+  } finally {
+    fs.rmSync(fakeDir, { recursive: true, force: true })
+    fs.rmSync(out, { recursive: true, force: true })
+  }
+})
+
+test('real python with PYTHONPATH materializes and writes the export package', async (t) => {
+  const home = process.env.IMPL_GATE_SPECGRAPH_HOME ?? 'D:\\ruanjian\\deepharness\\spec-graph'
+  if (!fs.existsSync(path.join(home, 'specgraph', '__init__.py'))) {
+    t.skip(`no specgraph checkout at ${home}`)
+    return
+  }
+  const probe = spawnSync('python', ['-c', 'import specgraph'], { env: { ...process.env, PYTHONPATH: home } })
+  if (probe.status !== 0) {
+    t.skip('host python cannot import specgraph even with PYTHONPATH')
+    return
+  }
+  const out = tempOut(basePlan())
+  try {
+    const result = await materializePlan(out, {
+      specgraphCommand: 'python -m specgraph',
+      pythonPath: '',
+      specgraphCwd: home,
+      timeoutMs: 60000,
+    })
+    assert.equal(result.ok, true, result.ok ? '' : result.message)
+    assert.ok(fs.existsSync(path.join(out, 'export', 'export.md')))
+    assert.ok(fs.existsSync(path.join(out, 'export', 'manifest.json')))
+    assert.ok(result.files.includes('export/export.md'))
+  } finally {
+    fs.rmSync(out, { recursive: true, force: true })
+  }
+})
+
+test('non-JSON check failure is PYTHON_ENV_MISSING, not GRAPH_INVALID', { skip: !winOnly && 'fake python wrapper is cmd-only' }, async () => {
+  const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-fakepy-'))
+  const fake = writeFakePython(fakeDir, ['@echo off', 'if "%~1"=="-c" exit /b 0', 'echo No module named specgraph', 'exit /b 1'])
+  const out = tempOut(basePlan())
+  try {
+    const result = await materializePlan(out, {
+      specgraphCommand: `cmd /d /c "${fake}" -m specgraph`,
+      pythonPath: '',
+      specgraphCwd: '',
+      timeoutMs: 5000,
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.code, 'PYTHON_ENV_MISSING')
+    assert.notEqual(result.code, 'GRAPH_INVALID')
+  } finally {
+    fs.rmSync(fakeDir, { recursive: true, force: true })
+    fs.rmSync(out, { recursive: true, force: true })
+  }
+})
+
+test('non-JSON export failure is PYTHON_ENV_MISSING', { skip: !winOnly && 'fake python wrapper is cmd-only' }, async () => {
+  const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-fakepy-'))
+  const fake = writeFakePython(fakeDir, [
+    '@echo off',
+    'if "%~1"=="-c" exit /b 0',
+    'echo %* | findstr /C:" check " >nul',
+    'if %errorlevel%==0 (',
+    '  echo {"ok":true,"issues":[]}',
+    '  exit /b 0',
+    ')',
+    'echo No module named specgraph',
+    'exit /b 1',
+  ])
+  const out = tempOut(basePlan())
+  try {
+    const result = await materializePlan(out, {
+      specgraphCommand: `cmd /d /c "${fake}" -m specgraph`,
+      pythonPath: '',
+      specgraphCwd: '',
+      timeoutMs: 5000,
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.code, 'PYTHON_ENV_MISSING')
+    assert.match(result.message, /export/)
+  } finally {
+    fs.rmSync(fakeDir, { recursive: true, force: true })
+    fs.rmSync(out, { recursive: true, force: true })
+  }
 })

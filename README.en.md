@@ -97,6 +97,9 @@ The three header names are fixed; each module must be a real node folder and eac
 | `impl_gate_check` | `graphRoot` (required), `implRoot`, `checklistPath`, `slow` | Runs once; `checklistPath` defaults to `<implRoot>/.impl-gate/checklist.md` |
 | `impl_gate_report` | `root` (required), `runId` | Reads the cache; without `runId` uses the latest run for that root |
 | `impl_gate_verify_contract` | `root` (required), `runId` | Re-checks A1–A5 only, never re-runs the other assertions |
+| `impl_gate_compose` | `outDir` (required), `requirement`, `name`, `stack`, `mode`, `overwrite`, `specgraphCwd` | `plan` writes `compose-plan.json` and `SPEC-DRAFT.md`; `materialize` emits the graph, `SPEC.md` and `export/` |
+
+`SPEC.md` lives at `<outDir>/SPEC.md`, beside the graph root rather than inside it: on case-insensitive Windows a graph-root `SPEC.md` is read as the root node `spec.md` and produces false `SECTION_MISSING` / `IMPL_LANGUAGE` findings. `ownership` records it, and spec-graph's `check` does not see it (expected) — deviation D-13.
 
 ### Configuration
 

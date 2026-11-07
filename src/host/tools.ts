@@ -15,8 +15,7 @@ import { emptyPlan, missingSlots, type PlanProblem } from './compose/plan.js'
 import { hashContractFiles } from './graph-hash.js'
 import {
   SpecgraphError,
-  findSpecgraphHome,
-  resolveArgv,
+  resolveSpecgraphEnv,
   runProcess,
   runSpecgraph,
   type RunOutput,
@@ -187,19 +186,16 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     return fail('E_INTERNAL_INCONSISTENT', (error as Error).message)
   }
 
-  const runnerCwd = config.specgraphCwd.length > 0 ? config.specgraphCwd : undefined
-  const sourceHome = runnerCwd === undefined ? findSpecgraphHome(graphRoot) : undefined
-  const runnerEnv =
-    sourceHome === undefined
-      ? undefined
-      : {
-          ...process.env,
-          PYTHONPATH: [sourceHome, process.env.PYTHONPATH].filter((part) => part !== undefined && part.length > 0).join(path.delimiter),
-        }
+  const environment = resolveSpecgraphEnv({
+    command: config.specgraphCommand,
+    pythonPath: config.pythonPath,
+    home: config.specgraphCwd,
+    startDirs: [graphRoot],
+  })
   const runner = {
-    argv: resolveArgv(config.specgraphCommand, config.pythonPath),
-    cwd: runnerCwd,
-    env: runnerEnv,
+    argv: environment.argv,
+    cwd: environment.cwd,
+    env: environment.env,
     timeoutMs: config.timeoutMs,
   }
 
@@ -291,7 +287,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     checks,
     checklist,
     preGraphHashes,
-    specgraphHome: sourceHome ?? '',
+    specgraphHome: environment.home ?? '',
     allowCommandReplay: config.allowCommandReplay,
     replayBudget: { remaining: 5 },
     run: (specArgs: string[]) =>
@@ -547,13 +543,16 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
     stack?: unknown
     mode?: unknown
     overwrite?: unknown
+    specgraphCwd?: unknown
   }
   const outDirRaw = typeof args.outDir === 'string' ? args.outDir.trim() : ''
   if (outDirRaw.length === 0) return fail('E_OUT_DIR_REQUIRED', 'outDir is required')
 
   const mode = args.mode === 'materialize' ? 'materialize' : 'plan'
   if (mode === 'materialize') {
-    const outcome = await materializePlan(outDirRaw, config)
+    const toolHome = typeof args.specgraphCwd === 'string' ? args.specgraphCwd.trim() : ''
+    const materializeConfig = toolHome.length > 0 ? { ...config, specgraphCwd: toolHome } : config
+    const outcome = await materializePlan(outDirRaw, materializeConfig)
     if (outcome.ok) {
       return {
         ok: true,
@@ -801,6 +800,10 @@ const composeParameters = {
       description: 'plan=写空槽模板与草稿；materialize=物化图谱与九节 SPEC.md（0.2.0-G2 起可用）。',
     },
     overwrite: { type: 'boolean', description: 'outDir 非空时是否覆盖 compose-plan.json 与 SPEC-DRAFT.md，默认 false。' },
+    specgraphCwd: {
+      type: 'string',
+      description: '本次调用覆盖配置里的 specgraphCwd（spec-graph 源码目录）；缺省按配置、向上查找、SPECGRAPH_HOME 依次解析。',
+    },
   },
   required: ['outDir', 'mode'],
 }

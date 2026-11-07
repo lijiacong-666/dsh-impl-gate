@@ -97,6 +97,24 @@ dsh plugin --profile headless add dsh-impl-gate
 | `impl_gate_check` | `graphRoot`（必填）、`implRoot`、`checklistPath`、`slow` | 跑一次；`checklistPath` 缺省 `<implRoot>/.impl-gate/checklist.md` |
 | `impl_gate_report` | `root`（必填）、`runId` | 读缓存汇总；无 `runId` 时取该根最近一次运行 |
 | `impl_gate_verify_contract` | `root`（必填）、`runId` | 只复核 A1–A5，不重跑其他断言 |
+| `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`；`materialize` 生成图谱、`SPEC.md` 与 `export/` |
+
+### `impl_gate_compose` 的输出结构
+
+```text
+<outDir>/
+├── compose-plan.json
+├── SPEC.md                    ← 与 graphRoot 同级，不放进图里
+├── .impl-gate/ownership.json
+├── export/
+│   ├── export.md
+│   └── manifest.json
+└── <name>/                    ← graphRoot
+    ├── graph.toml
+    └── <模块目录>/spec.md
+```
+
+`SPEC.md` 放在 `outDir` 根而不是图根：spec-graph 在 Windows 上大小写不敏感，图根里的 `SPEC.md` 会被当成根节点 `spec.md`，触发 `SECTION_MISSING`、`IMPL_LANGUAGE` 等误报。`ownership` 会登记它，spec-graph 的 `check` 看不到它（预期），见偏离 D-13。
 
 ### 配置
 
@@ -127,6 +145,7 @@ dsh plugin --profile headless add dsh-impl-gate
 | `E_NO_PRIOR_RUN` | 无缓存：没跑过、跨了根目录，或插件热重载清空了缓存 |
 | `E_RUN_EXPIRED` | 缓存超过 10 分钟 |
 | `E_INTERNAL_INCONSISTENT` | 32 条分区不干净，或未覆盖集合与 NOT-RUN 不一致 |
+| `PYTHON_ENV_MISSING` | 解释器导入不了 specgraph（compose 写盘前 preflight 失败；check/export 返回非 JSON 失败） |
 
 | NOT-RUN reason | 触发场景 |
 |----------------|----------|
