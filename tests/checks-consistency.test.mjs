@@ -54,6 +54,9 @@ const REASONS = new Set([
   'NOT_IMPLEMENTED',
   'MAPPING_TABLE_NOT_PROVIDED',
   'MANUAL_REVIEW_REQUIRED',
+  'EXEC_DISABLED',
+  'HUMAN_PROCESS_REQUIRED',
+  'EVIDENCE_TOKEN_UNSPECIFIED',
 ])
 
 test('checks.json is data, versioned, and not a string[] shortcut', () => {

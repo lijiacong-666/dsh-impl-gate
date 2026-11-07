@@ -7,7 +7,9 @@
       "title": "输入成对校验",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["instructionPackage"],
+      "requires": [
+        "instructionPackage"
+      ],
       "notRunReason": "MISSING_INSTRUCTION_PACKAGE",
       "command": "impl-gate:compare-manifest",
       "assert": "setsEqual(mdModules, manifestModules) && setsEqual(mdItemIds, manifestItemIds)"
@@ -18,7 +20,9 @@
       "title": "每条 AC 必须有三态结论",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["checklist"],
+      "requires": [
+        "checklist"
+      ],
       "notRunReason": "CHECKLIST_NOT_PROVIDED",
       "command": "impl-gate:checklist-tri-state",
       "assert": "count(checklistRows) == 32 && everyConclusionIn(PASS, FAIL, NOT-RUN) && count(otherValues) == 0"
@@ -29,7 +33,9 @@
       "title": "判定必须带证据",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["checklist"],
+      "requires": [
+        "checklist"
+      ],
       "notRunReason": "CHECKLIST_NOT_PROVIDED",
       "command": "impl-gate:checklist-evidence",
       "assert": "everyConclusionHasEvidence && emptyEvidenceCount == 0"
@@ -40,7 +46,9 @@
       "title": "未覆盖项单列",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["checklist"],
+      "requires": [
+        "checklist"
+      ],
       "notRunReason": "CHECKLIST_NOT_PROVIDED",
       "command": "impl-gate:checklist-uncovered",
       "assert": "setDiff(uncoveredSection, notRunSet).size == 0 && setDiff(notRunSet, uncoveredSection).size == 0"
@@ -51,7 +59,9 @@
       "title": "不得修改被测系统与契约",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["graphRoot"],
+      "requires": [
+        "graphRoot"
+      ],
       "notRunReason": null,
       "command": "impl-gate:graph-hash-stable",
       "assert": "sha256(spec.md, graph.toml before) == sha256(after)"
@@ -62,10 +72,13 @@
       "title": "先出映射表，再写第一行代码",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["mappingTable", "instructionPackage"],
+      "requires": [
+        "implRoot",
+        "graphRoot"
+      ],
       "notRunReason": "MAPPING_TABLE_NOT_PROVIDED",
       "command": "impl-gate:mapping-coverage",
-      "assert": "count(mappingRows) == count(manifestItems) && setDiff(mappingItemIds, manifestItemIds).size == 0"
+      "assert": "mapping.md has header 需求ID | 模块 | 条目 && every 需要 item id (Nx) in the graph appears as 需求ID"
     },
     {
       "id": "B2",
@@ -73,10 +86,13 @@
       "title": "只实现指令包列出的暴露项",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["implRoot", "instructionPackage"],
-      "notRunReason": "IMPL_ROOT_NOT_PROVIDED",
+      "requires": [
+        "checks",
+        "checklist"
+      ],
+      "notRunReason": "CHECKLIST_NOT_PROVIDED",
       "command": "impl-gate:exports-subset",
-      "assert": "setDiff(exportedSymbols, manifestExposed).size == 0 && setDiff(routes, manifestExposed).size == 0"
+      "assert": "setDiff(checklistIds, checksJsonIds).size == 0"
     },
     {
       "id": "B3",
@@ -84,8 +100,10 @@
       "title": "每条需求、约束都有落点并可追溯",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["implRoot"],
-      "notRunReason": "IMPL_ROOT_NOT_PROVIDED",
+      "requires": [
+        "implRoot"
+      ],
+      "notRunReason": "EVIDENCE_TOKEN_UNSPECIFIED",
       "command": "impl-gate:trace-ids",
       "assert": "coverage(manifestItemIds referenced by test names or key comments) == 1.0"
     },
@@ -106,10 +124,13 @@
       "title": "按模块推进，每个模块完成即测",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["git"],
-      "notRunReason": "GIT_UNAVAILABLE",
+      "requires": [
+        "implRoot",
+        "graphRoot"
+      ],
+      "notRunReason": "MAPPING_TABLE_NOT_PROVIDED",
       "command": "impl-gate:module-commit-tests",
-      "assert": "for every module commit, a matching test-run record appears within 1 commit"
+      "assert": "mapping rows all have non-empty 模块/条目 && every 模块 is a real node && each referenced module has >= 1 row"
     },
     {
       "id": "B6",
@@ -117,8 +138,10 @@
       "title": "失败即停",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["report"],
-      "notRunReason": null,
+      "requires": [
+        "report"
+      ],
+      "notRunReason": "HUMAN_PROCESS_REQUIRED",
       "command": "impl-gate:no-done-words",
       "assert": "hasFail(report) ? count(doneWords, deliveryNotes) == 0 : true"
     },
@@ -128,10 +151,13 @@
       "title": "每条 FAIL 附最小复现",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["report"],
-      "notRunReason": null,
+      "requires": [
+        "implRoot",
+        "checklist"
+      ],
+      "notRunReason": "CHECKLIST_NOT_PROVIDED",
       "command": "impl-gate:fail-repro",
-      "assert": "everyFailHasRunnableCommand && sampledFailOutputMatchesReport"
+      "assert": "every checklist row with status FAIL carries a repro: token in evidence"
     },
     {
       "id": "M1",
@@ -139,8 +165,11 @@
       "title": "model（模型）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:list-stable-with-code",
       "assert": "diff(list before, list after adding x.py) == empty && diff(checkJson before, after) == empty"
     },
@@ -150,8 +179,11 @@
       "title": "detect（实现细节识别）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:detect-whitelist",
       "assert": "codes(02) contains IMPL_CODE_BLOCK and IMPL_SIGNATURE && whitelisted hits disappear && other codes unchanged"
     },
@@ -161,8 +193,11 @@
       "title": "checks（校验）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:checks-codes",
       "assert": "exit(01) == 0 && exit(02) == 1 && exit(05) == 0 && codes(02) contains expected code set"
     },
@@ -172,8 +207,11 @@
       "title": "report（报告）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:report-fields",
       "assert": "allIssuesHave(code, node, section, item, line, fix) && textLineNumbers == jsonLineNumbers"
     },
@@ -183,8 +221,11 @@
       "title": "export（出口）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:export-contract",
       "assert": "export(01) contains fixedInstructionSentence && fenceCount == 0 && exit(export 02) != 0 && manifestItemCount == graphItemCount"
     },
@@ -194,8 +235,11 @@
       "title": "canvas（画布）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:canvas-offline",
       "assert": "externalUrlCount(canvas index.html) == 0 && canvasArtifactUnchangedWhenSpecChangesWithoutRerun"
     },
@@ -216,8 +260,11 @@
       "title": "library（模块库）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:library-template",
       "assert": "fenceCount(libraryTemplates) == 0 && check(afterDragIn) has no SECTION_MISSING"
     },
@@ -227,8 +274,11 @@
       "title": "cli（子命令）",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:cli-subcommands",
       "assert": "helpListsNine && every(subcommand --help) exit 0 && 03 REF_CHANGED then pin then clean && refs == 1 && usage == 1"
     },
@@ -249,7 +299,9 @@
       "title": "零第三方运行时依赖",
       "mode": "auto",
       "runtime": "slow",
-      "requires": ["venv"],
+      "requires": [
+        "venv"
+      ],
       "notRunReason": "SLOW_CHECK_DISABLED",
       "command": "impl-gate:clean-venv",
       "assert": "cleanVenvUnittestDiscover passes"
@@ -260,8 +312,10 @@
       "title": "Python >= 3.11，仅用 tomllib",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python"],
-      "notRunReason": null,
+      "requires": [
+        "python"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:py311-only",
       "assert": "exit(check on 3.11) == 0 && exit(startup on 3.10) != 0 && reasonIsReadable && noBareImportErrorTraceback"
     },
@@ -271,8 +325,11 @@
       "title": "确定性",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:determinism",
       "assert": "diff(checkJson run1, run2) == empty && diff(export run1, run2) == empty"
     },
@@ -293,8 +350,10 @@
       "title": "只写白名单路径",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["implRoot"],
-      "notRunReason": "IMPL_ROOT_NOT_PROVIDED",
+      "requires": [
+        "implRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:write-whitelist",
       "assert": "hashDelta(projectTree) subset of {.canvas/, exports/, .export/, layout.json}"
     },
@@ -304,8 +363,10 @@
       "title": "不解析代码",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["implRoot"],
-      "notRunReason": "IMPL_ROOT_NOT_PROVIDED",
+      "requires": [
+        "implRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:no-ast",
       "assert": "noAstOrSourceParseCalls && diff(checkJson with and without .py) == empty"
     },
@@ -315,8 +376,10 @@
       "title": "不回写代码与路径",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["implRoot"],
-      "notRunReason": "IMPL_ROOT_NOT_PROVIDED",
+      "requires": [
+        "implRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:no-path-leak",
       "assert": "pathRegexHits(products, spec.md) == 0 || everyHitLineStartsWith('file:')"
     },
@@ -326,8 +389,10 @@
       "title": "结构化错误契约稳定",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["schema"],
-      "notRunReason": "SCHEMA_UNAVAILABLE",
+      "requires": [
+        "schema"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:issue-schema",
       "assert": "setEqual(issueKeys, schemaKeys) && extraFields == 0 && missingFields == 0"
     },
@@ -337,8 +402,11 @@
       "title": "编码兼容",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python", "graphRoot"],
-      "notRunReason": null,
+      "requires": [
+        "python",
+        "graphRoot"
+      ],
+      "notRunReason": "EXEC_DISABLED",
       "command": "impl-gate:gbk-compat",
       "assert": "check(gbk copy) != 400 && warningEmittedOnce"
     },
@@ -348,7 +416,9 @@
       "title": "退出码契约",
       "mode": "auto",
       "runtime": "fast",
-      "requires": ["python"],
+      "requires": [
+        "python"
+      ],
       "notRunReason": null,
       "command": "impl-gate:exit-codes",
       "assert": "observedExitCodes == {0 for pass, 1 for errors, 2 for usage}"

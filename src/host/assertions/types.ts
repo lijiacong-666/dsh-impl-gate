@@ -23,8 +23,14 @@ export interface AssertionContext {
   preGraphHashes: Record<string, string>
   /** Auto-detected specgraph source root (D-06); '' when specgraphCwd is set or nothing was found. */
   specgraphHome: string
+  /** Step 5 gate: only replay evidence commands when explicitly enabled (D-09). */
+  allowCommandReplay: boolean
+  /** Shared across one run: at most five replayed commands (Step 5 rule). */
+  replayBudget: { remaining: number }
   run: (args: string[]) => Promise<RunOutput>
   runArgv: (argv: string[]) => Promise<RunOutput>
+  /** Runs a command with cwd pinned to implRoot and the 120s replay timeout. */
+  runImpl: (argv: string[]) => Promise<RunOutput>
   hashGraph: () => Promise<Record<string, string>>
   newTempDir: (prefix: string) => Promise<string>
 }

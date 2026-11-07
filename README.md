@@ -59,6 +59,17 @@ dsh plugin --profile headless add github:mofei/dsh-impl-gate#v0.1.0
 
 完整说明在 Step 6 补齐。
 
+## 人工核对项
+
+清单原文里有四条偏流程/语义的断言，v1 不做机械判定，由人核对（见 `docs/deviations.md` D-11）：
+
+1. 映射表行数 = manifest 条目总数（B1 原文）。
+2. 实现里的导出符号 / 路由表 ⊆ 指令包暴露项集合（B2 原文）。
+3. git 历史中每个模块提交后 1 次内出现对应测试运行记录（B5 原文）。
+4. 任取一条 FAIL，其复现命令可原样执行，输出与报告一致（B7 原文）。
+
+v1 的机械代理分别是：B1 检查 `mapping.md` 覆盖所有「需要」条目、B2 检查勾选表 id ⊆ checks.json id、B5 检查 mapping 每模块至少 1 行、B7 检查 FAIL 行带 `repro:`。代理项通过不等于原文四条已满足，交付时两者都要过。
+
 ## 缓存与重跑
 
 `impl_gate_report` 与 `impl_gate_verify_contract` 复用 `impl_gate_check` 留在进程内的结果（按 runId + 规范化根目录，TTL 10 分钟）。插件热重载会清空缓存，此时返回 `E_NO_PRIOR_RUN` 属于正常现象——重跑一次 `impl_gate_check` 即可。
@@ -68,6 +79,7 @@ dsh plugin --profile headless add github:mofei/dsh-impl-gate#v0.1.0
 | 键        | 默认值 | 说明       |
 | --------- | ------ | ---------- |
 | `enabled` | `true` | 启用插件。 |
+| `allowCommandReplay` | `false` | 是否按证据命令重放 M/Q 断言（≤5 条、120s、首词限 `python/pnpm/node`、cwd 限 `implRoot`）。 |
 
 TODO：说明配置保存在哪里；如有 API Key，说明它保存在 DSH 凭据域并脱敏显示。
 

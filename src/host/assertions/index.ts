@@ -2,8 +2,11 @@
 // landing below; check() reports NOT-RUN/NOT_IMPLEMENTED for ids without a
 // runnable implementation.
 import { checkA1 } from './a1.js'
+import { checkB1, checkB2, checkB3, checkB4, checkB5, checkB6, checkB7 } from './delivery.js'
 import { checkA2, checkA3, checkA4, checkA5 } from './input.js'
+import { checkM1, checkM2, checkM3, checkM4, checkM5, checkM6, checkM8, checkM9 } from './modules.js'
 import { checkQ10 } from './q10.js'
+import { checkQ2, checkQ3, checkQ5, checkQ6, checkQ7, checkQ8, checkQ9 } from './quality.js'
 import type { Assertion } from './types.js'
 
 export const ASSERTIONS: Readonly<Record<string, Assertion>> = {
@@ -12,6 +15,28 @@ export const ASSERTIONS: Readonly<Record<string, Assertion>> = {
   A3: checkA3,
   A4: checkA4,
   A5: checkA5,
+  B1: checkB1,
+  B2: checkB2,
+  B3: checkB3,
+  B4: checkB4,
+  B5: checkB5,
+  B6: checkB6,
+  B7: checkB7,
+  M1: checkM1,
+  M2: checkM2,
+  M3: checkM3,
+  M4: checkM4,
+  M5: checkM5,
+  M6: checkM6,
+  M8: checkM8,
+  M9: checkM9,
+  Q2: checkQ2,
+  Q3: checkQ3,
+  Q5: checkQ5,
+  Q6: checkQ6,
+  Q7: checkQ7,
+  Q8: checkQ8,
+  Q9: checkQ9,
   Q10: checkQ10,
 }
 

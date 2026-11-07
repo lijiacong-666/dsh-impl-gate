@@ -1,4 +1,4 @@
-// The three DSH tools exposed by dsh-impl-gate v1.
+﻿// The three DSH tools exposed by dsh-impl-gate v1.
 // Only impl_gate_check is real in Step 2; report and verify are registered so
 // the tool surface is stable, and return E_NOT_IMPLEMENTED until Step 4.
 import { randomUUID } from 'node:crypto'
@@ -26,6 +26,7 @@ export interface PluginConfig {
   timeoutMs: number
   implRoot: string
   slow: boolean
+  allowCommandReplay: boolean
 }
 
 export interface ToolFailure {
@@ -257,7 +258,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
   const checklist = loadChecklist(checklistPath)
   const preGraphHashes = await hashContractFiles(graphRoot)
 
-  const runArgv = (argv: string[]): Promise<RunOutput> => {
+  const mapPython = (argv: string[]): string[] => {
     const mapped = [...argv]
     const head = mapped[0]
     if (
@@ -267,8 +268,17 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     ) {
       mapped[0] = config.pythonPath
     }
-    return runProcess(mapped, { cwd: runner.cwd, env: runner.env, timeoutMs: config.timeoutMs })
+    return mapped
   }
+
+  const runArgvMapped = (argv: string[], opts: { cwd?: string; timeoutMs: number }): Promise<RunOutput> =>
+    runProcess(mapPython(argv), { cwd: opts.cwd, env: runner.env, timeoutMs: opts.timeoutMs })
+
+  const runArgv = (argv: string[]): Promise<RunOutput> =>
+    runArgvMapped(argv, { cwd: runner.cwd, timeoutMs: config.timeoutMs })
+
+  const runImpl = (argv: string[]): Promise<RunOutput> =>
+    runArgvMapped(argv, { cwd: implRoot, timeoutMs: 120_000 })
 
   const ctx: AssertionContext = {
     graphRoot,
@@ -279,9 +289,12 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     checklist,
     preGraphHashes,
     specgraphHome: sourceHome ?? '',
+    allowCommandReplay: config.allowCommandReplay,
+    replayBudget: { remaining: 5 },
     run: (specArgs: string[]) =>
       runSpecgraph({ argv: runner.argv, cwd: runner.cwd, env: runner.env, timeoutMs: config.timeoutMs }, specArgs),
     runArgv,
+    runImpl,
     hashGraph: () => hashContractFiles(graphRoot),
     newTempDir: (prefix: string) => fs.promises.mkdtemp(path.join(os.tmpdir(), prefix)),
   }

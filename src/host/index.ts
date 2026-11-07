@@ -1,4 +1,4 @@
-// Host entry: runs in the DSH Node process. Bundled to lib/index.js as ESM.
+﻿// Host entry: runs in the DSH Node process. Bundled to lib/index.js as ESM.
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { buildTools } from './tools.js'
@@ -7,7 +7,7 @@ export { buildTools } from './tools.js'
 // Exported for unit tests that must not spawn specgraph (A4 set rules).
 export { auditChecklist, parseChecklist } from './checklist.js'
 // Exported for unit tests of the cached-run selectors (report / verify_contract).
-export { buildReport, buildVerifyContract, coverageStatement, rememberRun } from './tools.js'
+export { buildReport, buildVerifyContract, coverageStatement, rememberRun, runCheck } from './tools.js'
 
 export const name = __PLUGIN_NAME__
 
@@ -22,6 +22,7 @@ export interface Config {
   timeoutMs: number
   implRoot: string
   slow: boolean
+  allowCommandReplay: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -32,6 +33,10 @@ export const Config: z<Config> = z.object({
   timeoutMs: z.number().default(30000).description('单次 specgraph 调用超时（毫秒）。'),
   implRoot: z.string().default('').description('实现根目录缺省值；为空时使用 graphRoot。'),
   slow: z.boolean().default(false).description('默认是否运行 slow 断言。'),
+  allowCommandReplay: z
+    .boolean()
+    .default(false)
+    .description('是否允许按证据命令重放 M/Q 断言（Step 5，默认关闭）。'),
 })
 
 interface RegisteredTool {
@@ -59,6 +64,7 @@ export function apply(ctx: Context, config: Config) {
       timeoutMs: config.timeoutMs,
       implRoot: config.implRoot,
       slow: config.slow,
+      allowCommandReplay: config.allowCommandReplay,
     },
   }
 
