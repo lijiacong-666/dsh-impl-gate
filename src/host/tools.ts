@@ -224,6 +224,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     checks,
     checklist,
     preGraphHashes,
+    specgraphHome: sourceHome ?? '',
     run: (specArgs: string[]) =>
       runSpecgraph({ argv: runner.argv, cwd: runner.cwd, env: runner.env, timeoutMs: config.timeoutMs }, specArgs),
     runArgv,

@@ -21,6 +21,8 @@ export interface AssertionContext {
   checks: CheckItem[]
   checklist: ChecklistParse
   preGraphHashes: Record<string, string>
+  /** Auto-detected specgraph source root (D-06); '' when specgraphCwd is set or nothing was found. */
+  specgraphHome: string
   run: (args: string[]) => Promise<RunOutput>
   runArgv: (argv: string[]) => Promise<RunOutput>
   hashGraph: () => Promise<Record<string, string>>

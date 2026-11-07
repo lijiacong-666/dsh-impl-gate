@@ -191,5 +191,5 @@ export const checkA1: Assertion = async (ctx: AssertionContext): Promise<Asserti
   if (problems.length > 0) {
     return { status: 'FAIL', evidence: problems.join(' | ') }
   }
-  return { status: 'PASS', evidence: lines.join(' | ') }
+  return { status: 'PASS', evidence: `${lines.join(' | ')} specgraph_home=${ctx.specgraphHome || 'configured'}` }
 }
