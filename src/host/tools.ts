@@ -984,7 +984,8 @@ export function buildTools(deps: ToolDeps) {
     description:
       'Run the 32 IMPL-GATE assertions against a spec-graph root. ' +
       'Calls `python -m specgraph check --json` first; an invalid graph makes every assertion NOT-RUN with D4_GRAPH_INVALID. ' +
-      'Does not do GUI checks, does not render a canvas, and never writes into the inspected project.',
+      'Does not do GUI checks, does not render a canvas, and never writes into the inspected project. ' +
+      'Use it once before delivery, when you need the full verdict table.',
     parameters: checkParameters,
     output: { schema: checkOutputSchema, render: renderCheck },
     async execute(args: unknown) {
@@ -1000,7 +1001,8 @@ export function buildTools(deps: ToolDeps) {
     name: 'impl_gate_report',
     description:
       'Summarise a previous impl_gate_check run as PASS/FAIL/NOT-RUN per assertion, reusing that run\'s cached results. ' +
-      'Does not re-run checks, does not do GUI checks and does not render a canvas.',
+      'Does not re-run checks, does not do GUI checks and does not render a canvas. ' +
+      'Use it right after check to read the summary and uncovered set.',
     parameters: runSelectorParameters,
     output: { schema: reportOutputSchema, render: renderReport },
     async execute(args: unknown) {
@@ -1016,7 +1018,8 @@ export function buildTools(deps: ToolDeps) {
     name: 'impl_gate_verify_contract',
     description:
       'Check that A1–A5 passed in one previous impl_gate_check run, reusing that run\'s cached results. ' +
-      'Does not re-run checks, does not do GUI checks and does not render a canvas.',
+      'Does not re-run checks, does not do GUI checks and does not render a canvas. ' +
+      'Use it when only the contract deliverables need a yes/no.',
     parameters: runSelectorParameters,
     output: { schema: verifyOutputSchema, render: renderVerify },
     async execute(args: unknown) {
@@ -1031,7 +1034,8 @@ export function buildTools(deps: ToolDeps) {
   const compose = {
     name: 'impl_gate_compose',
     description:
-      'Turn a requirement into a施工文档 chain. mode "plan" writes compose-plan.json (the only place content lives) and ' +
+      'Turn a requirement into a施工文档 chain. 动手前先读包内 playbooks/compose.md（相对本包根目录）；它规定了 plan 各字段的写法。 ' +
+      'mode "plan" writes compose-plan.json (the only place content lives) and ' +
       'SPEC-DRAFT.md with explicit TODO slots. mode "materialize" writes <outDir>/<name>/graph.toml + per-module spec.md, ' +
       'a nine-section SPEC.md beside <name>/, and export/export.md + export/manifest.json, then validates the graph with ' +
       '`python -m specgraph check`; an invalid ' +
@@ -1052,7 +1056,8 @@ export function buildTools(deps: ToolDeps) {
     description:
       'Generate per-module task cards from <outDir>/compose-plan.json into <outDir>/tasks/ (TASKS.md, cards.json, ' +
       'wave-N/<id>-<dir>.md). Waves and overlaps come from the same planner as materialize; output is deterministic. ' +
-      'It never edits the graph root, SPEC.md or export/, and never invents requirements or assertions.',
+      'It never edits the graph root, SPEC.md or export/, and never invents requirements or assertions. ' +
+      'Use it after materialize, before splitting implementation across several agents.',
     parameters: initParameters,
     output: { schema: initOutputSchema, render: renderInit },
     async execute(args: unknown) {

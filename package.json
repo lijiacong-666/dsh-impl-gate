@@ -42,6 +42,8 @@
   "files": [
     "lib/index.js",
     "checks/impl-gate.checks.json",
+    "playbooks/compose.md",
+    "playbooks/examples/login.md",
     "icon.svg",
     "cordis.patch.yml",
     "README.md",

@@ -19,14 +19,19 @@ const required = [
   'package.json',
   'lib/index.js',
   'checks/impl-gate.checks.json',
+  'playbooks/compose.md',
+  'playbooks/examples/login.md',
   'icon.svg',
   'cordis.patch.yml',
   'LICENSE',
 ]
+const allowedPlaybooks = new Set(['playbooks/compose.md', 'playbooks/examples/login.md'])
 if (pkg.dsh?.client) required.push('lib/client.js')
 const missing = required.filter((file) => !packed.has(file))
-const leaked = [...packed].filter((file) =>
-  /^(src|tests|scripts|playbooks|docs|\.github)\//.test(file),
+const leaked = [...packed].filter(
+  (file) =>
+    /^(src|tests|scripts|docs|\.github)\//.test(file) ||
+    (file.startsWith('playbooks/') && !allowedPlaybooks.has(file)),
 )
 
 if (missing.length || leaked.length) {
