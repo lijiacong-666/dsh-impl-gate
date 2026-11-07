@@ -185,7 +185,7 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 ]
 ```
 
-规则：`module` 必须存在且该模块有 `kind:"http"` 的 expose；`handler` 必须等于该签名开头的标识符；`req`/`res` 必须是 `types` 里声明过的类型；同一 `method+path` 只能出现一次。**验收断言里写到的路由也必须先在这里声明**：`acceptance[].assertion` 里出现 `GET /bookmarks/:id`，`http[]` 就要有同 `method+path` 的条目，否则报 `acceptance references undeclared route "GET /bookmarks/:id" at /modules/<i>/acceptance/<j>`。
+规则：`module` 必须存在且该模块有 `kind:"http"` 的 expose；`handler` 必须等于该签名开头的标识符；`req`/`res` 必须是 `types` 里声明过的类型；同一 `method+path` 只能出现一次。**验收断言里写到的路由也必须先在这里声明**：`acceptance[].assertion` 里出现 `GET /bookmarks/:id`，`http[]` 就要有同 `method+path` 的条目，否则报 `acceptance references undeclared route "GET /bookmarks/:id" at /modules/<i>/acceptance/<j>（已声明：…）`。断言里的 query string（`GET /bookmarks?scope=team`）、句尾标点（`GET /bookmarks,`）和包裹引号（`GET “/bookmarks”`）不参与路由比对；但 `:param` 名称不同仍算不同路由，不会模糊匹配。
 
 ### 表归属与运行时写入方
 

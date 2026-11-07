@@ -150,8 +150,36 @@ test('acceptance referencing an undeclared route reports the exact route and poi
   assert.ok(found, JSON.stringify(problemsOf(plan)))
   assert.equal(
     found.message,
-    'acceptance references undeclared route "GET /bookmarks/:id" at /modules/1/acceptance/0',
+    'acceptance references undeclared route "GET /bookmarks/:id" at /modules/1/acceptance/0（已声明：/bookmarks）',
   )
+})
+
+test('a query string on an acceptance route is not part of the path', () => {
+  const plan = basePlan()
+  plan.http.push({ method: 'GET', path: '/search', module: 'M2', handler: 'listBookmarks', res: 'Bookmark' })
+  plan.modules[1].acceptance[0].assertion = 'GET /bookmarks?scope=team 与 GET /search?q=vue 都返回列表'
+  assert.deepEqual(problemsOf(plan), [])
+})
+
+test('an undeclared route keeps its path but drops the query string', () => {
+  const plan = basePlan()
+  plan.modules[1].acceptance[0].assertion = 'GET /bookmarks/:id?x=1 返回单条书签'
+  const found = findProblem(plan, '/modules/1/acceptance/0/assertion')
+  assert.ok(found, JSON.stringify(problemsOf(plan)))
+  assert.match(found.message, /undeclared route "GET \/bookmarks\/:id" at \/modules\/1\/acceptance\/0/)
+  assert.equal(found.message.includes('?x=1'), false, found.message)
+})
+
+test('trailing punctuation and Chinese quotes are not part of the path', () => {
+  const plan = basePlan()
+  plan.modules[1].acceptance[0].assertion = 'GET /bookmarks, 返回列表；GET “/bookmarks” 同样返回列表。'
+  assert.deepEqual(problemsOf(plan), [])
+})
+
+test('a slash in prose without a leading path is not mistaken for a route', () => {
+  const plan = basePlan()
+  plan.modules[1].acceptance[0].assertion = '支持读/写，不新增路由。'
+  assert.deepEqual(problemsOf(plan), [])
 })
 
 test('acceptance referencing a declared route is accepted', () => {

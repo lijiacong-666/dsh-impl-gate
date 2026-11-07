@@ -168,7 +168,30 @@ const HTTP_METHOD_PREFIX = /^(?:GET|POST|PUT|PATCH|DELETE)\s+/
 // whitespace, then a path beginning with "/". The narrow path alphabet keeps
 // prose such as "pnpm vitest run tests/x" out of this rule; a bare method with
 // no path never matches.
-const ROUTE_REF_RE = /\b(GET|POST|PUT|PATCH|DELETE)[ \t]+(\/[A-Za-z0-9._~:/?#%&=-]*)/g
+const ROUTE_REF_RE = /\b(GET|POST|PUT|PATCH|DELETE)[ \t]+[“"「『《]?(\/[A-Za-z0-9._~:/?#%&=-]*)/g
+const ROUTE_TRAILING_PUNCT = /[,.;:)）;、」』”’》】"'。]+$/u
+
+/**
+ * G7.1: acceptance prose often appends a query string, a sentence comma or a
+ * closing quote to a route. Only the path is the route; keep param names
+ * strict (no fuzzy matching), but normalise the obvious prose punctuation.
+ */
+function normalizeRouteRef(rawPath: string): string | undefined {
+  const cut = rawPath.search(/[?#]/)
+  const path = (cut === -1 ? rawPath : rawPath.slice(0, cut)).replace(ROUTE_TRAILING_PUNCT, '')
+  if (path.length === 0 || /\s/.test(path)) return undefined
+  return path
+}
+
+function declaredRouteHint(declared: Set<string>, method: string): string {
+  const paths = [...declared]
+    .filter((route) => route.startsWith(`${method} `))
+    .map((route) => route.slice(method.length + 1))
+    .sort()
+  if (paths.length === 0) return ''
+  const shown = paths.slice(0, 3)
+  return `（已声明：${shown.join('、')}${paths.length > shown.length ? ' 等' : ''}）`
+}
 const ERROR_CODE_RE = /^E_[A-Z0-9_]+$/
 const ERROR_REF_RE = /\bE_[A-Z0-9_]+/g
 const HANDLER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*/
@@ -820,14 +843,18 @@ function validateAcceptanceRoutes(modulesRaw: unknown, httpRaw: unknown, problem
       const itemAt = pointer(at, itemIndex)
       const reported = new Set<string>()
       for (const match of item.assertion.matchAll(ROUTE_REF_RE)) {
-        const route = `${match[1]} ${match[2] ?? ''}`
-        if (route.endsWith(' ')) continue
+        const method = match[1]
+        const rawPath = match[2]
+        if (method === undefined || rawPath === undefined) continue
+        const path = normalizeRouteRef(rawPath)
+        if (path === undefined) continue
+        const route = `${method} ${path}`
         if (declared.has(route) || reported.has(route)) continue
         reported.add(route)
         problem(
           problems,
           pointer(itemAt, 'assertion'),
-          `acceptance references undeclared route "${route}" at ${itemAt}`,
+          `acceptance references undeclared route "${route}" at ${itemAt}${declaredRouteHint(declared, method)}`,
         )
       }
     })
