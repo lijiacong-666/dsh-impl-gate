@@ -1,4 +1,4 @@
-﻿// The three DSH tools exposed by dsh-impl-gate v1.
+// The three DSH tools exposed by dsh-impl-gate v1.
 // Only impl_gate_check is real in Step 2; report and verify are registered so
 // the tool surface is stable, and return E_NOT_IMPLEMENTED until Step 4.
 import { randomUUID } from 'node:crypto'
@@ -9,6 +9,8 @@ import { ASSERTIONS } from './assertions/index.js'
 import type { AssertionContext } from './assertions/types.js'
 import { loadChecks, type CheckItem } from './checks.js'
 import { loadChecklist } from './checklist.js'
+import { renderDraft } from './compose/draft.js'
+import { emptyPlan, missingSlots, type PlanProblem } from './compose/plan.js'
 import { hashContractFiles } from './graph-hash.js'
 import {
   SpecgraphError,
@@ -509,6 +511,88 @@ function renderReport(_args: unknown, value: unknown): Array<{ type: 'text'; tex
   return [{ type: 'text', text: lines.filter((line) => line.length > 0).join('\n') }]
 }
 
+export interface ComposePayload {
+  ok: boolean
+  mode: string
+  planPath: string
+  draftPath: string
+  missingSlots: string[]
+  problems: PlanProblem[]
+}
+
+/**
+ * `mode: "plan"` only writes compose-plan.json and SPEC-DRAFT.md.
+ * It never calls specgraph and never touches spec.md / graph.toml.
+ */
+export async function buildCompose(rawArgs: unknown): Promise<ComposePayload | ToolFailure> {
+  const args = (rawArgs ?? {}) as {
+    outDir?: unknown
+    requirement?: unknown
+    name?: unknown
+    stack?: unknown
+    mode?: unknown
+    overwrite?: unknown
+  }
+  const outDirRaw = typeof args.outDir === 'string' ? args.outDir.trim() : ''
+  if (outDirRaw.length === 0) return fail('E_OUT_DIR_REQUIRED', 'outDir is required')
+
+  const mode = args.mode === 'materialize' ? 'materialize' : 'plan'
+  if (mode === 'materialize') {
+    return fail('E_NOT_IMPLEMENTED', 'materialize is not part of G1; only mode "plan" exists yet')
+  }
+
+  const outDir = path.resolve(outDirRaw)
+  try {
+    const stat = await fs.promises.stat(outDir)
+    if (!stat.isDirectory()) {
+      return fail('E_OUT_DIR_NOT_EMPTY', `outDir exists and is not a directory: ${outDir}`)
+    }
+    const entries = await fs.promises.readdir(outDir)
+    if (entries.length > 0 && args.overwrite !== true) {
+      return fail(
+        'E_OUT_DIR_NOT_EMPTY',
+        `outDir is not empty: ${outDir}`,
+        `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}; pass overwrite:true to replace compose-plan.json and SPEC-DRAFT.md`,
+      )
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code !== 'ENOENT') return failureFrom(error)
+  }
+
+  await fs.promises.mkdir(outDir, { recursive: true })
+  const planPath = path.join(outDir, 'compose-plan.json')
+  const draftPath = path.join(outDir, 'SPEC-DRAFT.md')
+
+  const template = emptyPlan({
+    name: typeof args.name === 'string' ? args.name : undefined,
+    stack: typeof args.stack === 'string' ? args.stack : undefined,
+  })
+  const requirement = typeof args.requirement === 'string' ? args.requirement : undefined
+  await fs.promises.writeFile(planPath, `${JSON.stringify(template, null, 2)}\n`, 'utf8')
+  await fs.promises.writeFile(draftPath, renderDraft({ plan: template, requirement }), 'utf8')
+
+  return {
+    ok: true,
+    mode: 'plan',
+    planPath,
+    draftPath,
+    missingSlots: missingSlots(template),
+    problems: [],
+  }
+}
+
+function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
+  const payload = value as Partial<ComposePayload & ToolFailure>
+  if (payload.error !== undefined) {
+    return [{ type: 'text', text: `impl_gate_compose failed: ${payload.error.code} — ${payload.error.message}` }]
+  }
+  const slots = payload.missingSlots ?? []
+  const lines = [`impl_gate_compose ${payload.mode ?? ''}: ${payload.planPath ?? ''}`, `draft: ${payload.draftPath ?? ''}`]
+  lines.push(slots.length === 0 ? 'missingSlots: none' : `missingSlots (${slots.length}): ${slots.join(' | ')}`)
+  return [{ type: 'text', text: lines.join('\n') }]
+}
+
 function renderVerify(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
   const payload = value as Partial<VerifyPayload & ToolFailure>
   if (payload.error !== undefined) {
@@ -634,6 +718,50 @@ const stubOutputSchema = {
   properties: { error: errorSchema },
 }
 
+const composeParameters = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    outDir: { type: 'string', description: '输出目录（绝对路径）。plan 模式只会写入 compose-plan.json 与 SPEC-DRAFT.md。' },
+    requirement: { type: 'string', description: '需求原文，写进 SPEC-DRAFT.md 文首，供模型补槽时对照。' },
+    name: { type: 'string', description: '输出目录名/项目名，需匹配 ^[a-z][a-z0-9-]{1,40}$；缺省 my-app。' },
+    stack: { type: 'string', description: '技术栈描述，例如 "node22+fastify+react+pg"。' },
+    mode: {
+      type: 'string',
+      enum: ['plan', 'materialize'],
+      description: 'plan=写空槽模板与草稿；materialize=物化图谱与九节 SPEC.md（0.2.0-G2 起可用）。',
+    },
+    overwrite: { type: 'boolean', description: 'outDir 非空时是否覆盖 compose-plan.json 与 SPEC-DRAFT.md，默认 false。' },
+  },
+  required: ['outDir', 'mode'],
+}
+
+const composeOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ok: { type: 'boolean' },
+    mode: { type: 'string' },
+    planPath: { type: 'string' },
+    draftPath: { type: 'string' },
+    missingSlots: { type: 'array', items: { type: 'string' } },
+    problems: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          code: { type: 'string' },
+          path: { type: 'string' },
+          message: { type: 'string' },
+        },
+        required: ['code', 'path', 'message'],
+        additionalProperties: false,
+      },
+    },
+    error: errorSchema,
+  },
+}
+
 export function buildTools(deps: ToolDeps) {
   const check = {
     name: 'impl_gate_check',
@@ -684,5 +812,22 @@ export function buildTools(deps: ToolDeps) {
     },
   }
 
-  return [check, report, verify]
+  const compose = {
+    name: 'impl_gate_compose',
+    description:
+      'Turn a requirement into a施工文档 scaffold. mode "plan" writes compose-plan.json (the only place content lives) ' +
+      'and SPEC-DRAFT.md with explicit TODO slots. It never invents content, never calls specgraph and never writes ' +
+      'spec.md/graph.toml; materialize is not available in this card.',
+    parameters: composeParameters,
+    output: { schema: composeOutputSchema, render: renderCompose },
+    async execute(args: unknown) {
+      try {
+        return await buildCompose(args)
+      } catch (error) {
+        return failureFrom(error)
+      }
+    },
+  }
+
+  return [check, report, verify, compose]
 }

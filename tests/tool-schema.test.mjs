@@ -81,9 +81,14 @@ function definitions() {
   })
 }
 
-test('exactly three tools are registered', () => {
+test('exactly four tools are registered', () => {
   const names = definitions().map((tool) => tool.name)
-  assert.deepEqual(names, ['impl_gate_check', 'impl_gate_report', 'impl_gate_verify_contract'])
+  assert.deepEqual(names, [
+    'impl_gate_check',
+    'impl_gate_report',
+    'impl_gate_verify_contract',
+    'impl_gate_compose',
+  ])
 })
 
 test('every tool definition satisfies the DSH schema subset', () => {
