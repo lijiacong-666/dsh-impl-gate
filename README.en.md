@@ -131,6 +131,8 @@ When `specgraphCwd` is empty the plugin walks up from `graphRoot` looking for `s
 | `E_NO_PRIOR_RUN` | No cached run: never ran, different root, or lost on plugin reload |
 | `E_RUN_EXPIRED` | Cache older than 10 minutes |
 | `E_INTERNAL_INCONSISTENT` | 32-id partition dirty, or uncovered set ≠ NOT-RUN set |
+| `PYTHON_ENV_MISSING` | Interpreter cannot import specgraph (compose preflight, or check/export returned non-JSON failure) |
+| `PLAN_HAS_CYCLE` | `impl_gate_init`: module dependencies form a cycle; surfaced from `validatePlan`'s cycle detection, `code` is a reason string rather than a §5 error code, message carries `A → B → A` |
 
 | NOT-RUN reason | Trigger |
 |----------------|---------|

@@ -13,6 +13,7 @@ export interface CardTarget {
 
 export interface CardRenderOptions {
   implRoot?: string
+  outDir?: string
 }
 
 const NONE = '（无）'
@@ -30,6 +31,13 @@ export function cardPathOf(module: Module, wave: number): string {
 function withPrefix(file: string, implRoot?: string): string {
   const root = (implRoot ?? '').trim().replace(/[\\/]+$/, '')
   return root.length === 0 ? file : `${root}/${file}`
+}
+
+function rootText(options: CardRenderOptions): string {
+  const implRoot = (options.implRoot ?? '').trim().replace(/[\\/]+$/, '')
+  if (implRoot.length > 0) return implRoot
+  const outDir = (options.outDir ?? '').trim().replace(/[\\/]+$/, '')
+  return outDir.length > 0 ? `本任务包所在目录 ${outDir}` : '本任务包所在目录'
 }
 
 function exposeText(provider: Module | undefined, item: string): string {
@@ -52,6 +60,8 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
     '## 2 文件白名单',
     '',
     '只允许新建或修改以下文件，越界即失败：',
+    '',
+    `以下路径相对 ${rootText(options)}。往 graphRoot 里写文件视为失败：契约目录只读，实现产物只放 ${rootText(options)}。`,
     '',
   ]
   if (module.files.length === 0) {
@@ -112,6 +122,7 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
     '',
     '- 不修改其他模块的文件、不修改 graphRoot 下的契约文件；',
     '- 不新增白名单外的文件（含临时脚本，需放 /tmp 或仓库根 _probe）；',
+    '- 不往 graphRoot 或 tasks/ 目录里写实现代码。',
     '- 不把验收断言改成更容易通过的形式；断言写错了，回报里提出，不要私自改。',
     '',
   )
@@ -150,7 +161,8 @@ export function renderTasksDoc(plan: Plan, waves: Wave[], overlaps: WaveOverlap[
   }
   lines.push('', '## 2 并行分组', '')
   for (const wave of waves) {
-    lines.push(`- 波次 ${wave.index}：${wave.modules.join('、')}（可并行）`)
+    const mode = wave.modules.length === 1 ? '（独立）' : '（可并行）'
+    lines.push(`- 波次 ${wave.index}：${wave.modules.join('、')}${mode}`)
   }
   if (overlaps.length > 0) {
     lines.push('')

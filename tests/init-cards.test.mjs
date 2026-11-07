@@ -215,4 +215,28 @@ test('implRoot prefixes whitelist paths only when supplied', (t) => {
   const prefixedCard = fs.readFileSync(path.join(prefixed, 'tasks', 'wave-2', 'M2-user-service.md'), 'utf8')
   assert.match(plainCard, /^- src\/user\.ts$/m)
   assert.match(prefixedCard, /^- D:\/work\/app\/src\/user\.ts$/m)
+  assert.match(plainCard, new RegExp(`以下路径相对 本任务包所在目录 ${plain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}。`))
+  assert.match(prefixedCard, /以下路径相对 D:\/work\/app。往 graphRoot 里写文件视为失败/)
+  assert.match(plainCard, /不往 graphRoot 或 tasks\/ 目录里写实现代码/)
+})
+
+test('TASKS.md marks single-module waves 独立 and shared waves 可并行', (t) => {
+  const single = tempOut(makePlan(threeModules()))
+  const shared = tempOut(
+    makePlan([
+      moduleOf({ id: 'M1', dir: 'a', title: 'A', responsibility: 'a', exposes: [{ kind: 'fn', signature: 'A' }], constraints: ['c1'], files: ['a.ts'], acceptance: [{ id: 'a1', assertion: 'x', test: 't' }] }),
+      moduleOf({ id: 'M2', dir: 'b', title: 'B', responsibility: 'b', exposes: [{ kind: 'fn', signature: 'B' }], constraints: ['c2'], files: ['b.ts'], acceptance: [{ id: 'a2', assertion: 'y', test: 't' }] }),
+    ]),
+  )
+  t.after(() => {
+    fs.rmSync(single, { recursive: true, force: true })
+    fs.rmSync(shared, { recursive: true, force: true })
+  })
+  assert.equal(initTasks(single).ok, true)
+  assert.equal(initTasks(shared).ok, true)
+  const singleTasks = fs.readFileSync(path.join(single, 'tasks', 'TASKS.md'), 'utf8')
+  const sharedTasks = fs.readFileSync(path.join(shared, 'tasks', 'TASKS.md'), 'utf8')
+  assert.match(singleTasks, /波次 1：M1（独立）/)
+  assert.match(singleTasks, /波次 3：M3（独立）/)
+  assert.match(sharedTasks, /波次 1：M1、M2（可并行）/)
 })

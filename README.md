@@ -147,6 +147,7 @@ dsh plugin --profile headless add dsh-impl-gate
 | `E_RUN_EXPIRED` | 缓存超过 10 分钟 |
 | `E_INTERNAL_INCONSISTENT` | 32 条分区不干净，或未覆盖集合与 NOT-RUN 不一致 |
 | `PYTHON_ENV_MISSING` | 解释器导入不了 specgraph（compose 写盘前 preflight 失败；check/export 返回非 JSON 失败） |
+| `PLAN_HAS_CYCLE` | `impl_gate_init`：plan 的模块依赖成环；由 `validatePlan` 的环检测转出，`code` 是原因串而非 §5 错误码，message 带 `A → B → A` |
 
 | NOT-RUN reason | 触发场景 |
 |----------------|----------|

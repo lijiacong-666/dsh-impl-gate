@@ -112,7 +112,7 @@ export function initTasks(outDirRaw: string, options: InitOptions = {}): InitPay
     if (wave === undefined) return failure('PLAN_INVALID', `wave ${waveIndex} is missing`)
     const cardPath = cardPathOf(module, wave.index)
     cards.push({ moduleId: module.id, wave: wave.index, cardPath })
-    rendered.set(cardPath, renderTaskCard(plan, module, wave, { implRoot: options.implRoot }))
+    rendered.set(cardPath, renderTaskCard(plan, module, wave, { implRoot: options.implRoot, outDir }))
   }
   cards.sort((a, b) => a.moduleId.localeCompare(b.moduleId))
 
