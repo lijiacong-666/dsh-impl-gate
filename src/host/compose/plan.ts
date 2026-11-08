@@ -42,6 +42,10 @@ export interface PlanHttp {
   req?: string
   /** `void` means 204 with no body. */
   res: string
+  /** A real request body, as JSON text; rendered verbatim in 4.4. */
+  reqExample?: string
+  /** A real response body, as JSON text; rendered verbatim in 4.4. */
+  resExample?: string
   /** Who may call it: public / session / admin. Absent renders as public. */
   auth?: 'public' | 'session' | 'admin'
 }
@@ -65,6 +69,19 @@ export interface PlanFlow {
   failure?: string[]
 }
 
+export interface PlanRuntime {
+  /** TCP port the service listens on; 0 means "pick any" (tests). */
+  port?: number
+  /** Command that starts the service in a clean checkout. */
+  start?: string
+  /** Path that returns 200 when the service is healthy. */
+  health?: string
+  /** Command that applies pending migrations. */
+  migrate?: string
+  /** What to do when a deploy must be undone. */
+  rollback?: string
+}
+
 export interface Plan {
   schemaVersion: 1
   name: string
@@ -82,6 +99,8 @@ export interface Plan {
     listEnvelope?: boolean
     /** Default response body shape for every `errors[]` entry without its own. */
     errorShape?: string
+    /** Non-functional requirements: rate limits, brute-force guard, latency budget, log fields. */
+    nfr?: string[]
   }
   data: Array<{
     table: string
@@ -106,6 +125,8 @@ export interface Plan {
   types?: PlanType[]
   errors?: PlanError[]
   http?: PlanHttp[]
+  /** How the designed system runs: port, start, health, migrate, rollback. */
+  runtime?: PlanRuntime
   /** Cross-module call orders: who calls whom, in what order, on which trigger. */
   flows?: PlanFlow[]
   openQuestions?: string[]
@@ -136,6 +157,7 @@ const ROOT_KEYS = new Set([
   'types',
   'errors',
   'http',
+  'runtime',
   'flows',
   'openQuestions',
   'deliverables',
@@ -156,15 +178,16 @@ const REQUIRE_KEYS = new Set(['module', 'item', 'why'])
 const BOUNDARY_KEYS = new Set(['dependency', 'purpose', 'version', 'fallback'])
 const COLUMN_KEYS = new Set(['name', 'type', 'constraints'])
 const DATA_KEYS = new Set(['table', 'owner', 'rowWriters', 'columns', 'indexes', 'notes'])
-const GLOBALS_KEYS = new Set(['conventions', 'forbidden', 'envKeys', 'fieldCase', 'listEnvelope', 'errorShape'])
+const GLOBALS_KEYS = new Set(['conventions', 'forbidden', 'envKeys', 'fieldCase', 'listEnvelope', 'errorShape', 'nfr'])
 const DELIVERABLE_KEYS = new Set(['tree', 'files'])
 const FILE_KEYS = new Set(['path', 'purpose'])
 const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
 const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note'])
 const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
 const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape', 'by'])
-const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth'])
+const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth', 'reqExample', 'resExample'])
 const FLOW_KEYS = new Set(['id', 'name', 'trigger', 'steps', 'success', 'failure'])
+const RUNTIME_KEYS = new Set(['port', 'start', 'health', 'migrate', 'rollback'])
 const FLOW_STEP_KEYS = new Set(['module', 'action', 'note'])
 const AUTH_MODES = new Set(['public', 'session', 'admin'])
 
@@ -730,6 +753,19 @@ function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>,
       }
     }
     readString(entry.res, pointer(at, 'res'), problems)
+    for (const field of ['reqExample', 'resExample'] as const) {
+      const value = entry[field]
+      if (value === undefined) continue
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        problem(problems, pointer(at, field), 'must be a non-empty JSON string')
+        continue
+      }
+      try {
+        JSON.parse(value)
+      } catch {
+        problem(problems, pointer(at, field), 'must be valid JSON text (quote keys and strings)')
+      }
+    }
   })
 }
 
@@ -1228,6 +1264,26 @@ export function validatePlan(rawInput: unknown): PlanValidation {
     }
   })
 
+  if (raw.runtime !== undefined) {
+    if (!isRecord(raw.runtime)) {
+      problem(problems, '/runtime', 'must be an object when present')
+    } else {
+      checkKnownKeys(raw.runtime, RUNTIME_KEYS, '/runtime', problems)
+      const port = raw.runtime.port
+      if (port !== undefined) {
+        if (typeof port !== 'number' || !Number.isInteger(port) || port < 0 || port > 65535) {
+          problem(problems, '/runtime/port', 'must be an integer between 0 and 65535')
+        }
+      }
+      for (const field of ['start', 'health', 'migrate', 'rollback'] as const) {
+        const value = raw.runtime[field]
+        if (value !== undefined && (typeof value !== 'string' || value.trim().length === 0)) {
+          problem(problems, pointer('/runtime', field), 'must be a non-empty string when present')
+        }
+      }
+    }
+  }
+
   let defaultErrorShape: string | undefined
   if (!isRecord(raw.globals)) {
     problem(problems, '/globals', 'must be an object')
@@ -1235,6 +1291,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
     checkKnownKeys(raw.globals, GLOBALS_KEYS, '/globals', problems)
     readStringArray(raw.globals.conventions, '/globals/conventions', problems)
     readStringArray(raw.globals.forbidden, '/globals/forbidden', problems)
+    if (raw.globals.nfr !== undefined) readStringArray(raw.globals.nfr, '/globals/nfr', problems)
     if (raw.globals.envKeys !== undefined) readStringArray(raw.globals.envKeys, '/globals/envKeys', problems)
     if (raw.globals.fieldCase !== undefined && raw.globals.fieldCase !== 'camel' && raw.globals.fieldCase !== 'snake') {
       problem(problems, '/globals/fieldCase', 'must be "camel" or "snake"')

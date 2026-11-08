@@ -176,6 +176,16 @@ export function renderSpecDoc(input: SpecDocInput): string {
         route.res.trim() === 'void' ? '204（无响应体）' : route.res,
       ]),
     ), '')
+    const documented = http.filter((route) => route.reqExample !== undefined || route.resExample !== undefined)
+    for (const route of documented) {
+      lines.push(`#### ${route.method} ${route.path} 示例`, '')
+      if (route.reqExample !== undefined) {
+        lines.push('请求体：', '', '```json', route.reqExample.trim(), '```', '')
+      }
+      if (route.resExample !== undefined) {
+        lines.push('响应体：', '', '```json', route.resExample.trim(), '```', '')
+      }
+    }
   }
 
   // 5
@@ -264,6 +274,24 @@ export function renderSpecDoc(input: SpecDocInput): string {
     `- 错误体形状：${cell(errorShape)}`,
     '',
   )
+
+  const runtime = plan.runtime ?? {}
+  const runtimeRows: string[][] = []
+  if (runtime.port !== undefined) runtimeRows.push(['端口', String(runtime.port)])
+  if (runtime.start !== undefined) runtimeRows.push(['启动', runtime.start])
+  if (runtime.health !== undefined) runtimeRows.push(['健康检查', runtime.health])
+  if (runtime.migrate !== undefined) runtimeRows.push(['迁移', runtime.migrate])
+  if (runtime.rollback !== undefined) runtimeRows.push(['回滚', runtime.rollback])
+  lines.push('### 8.1 运行与部署', '')
+  if (runtimeRows.length === 0) {
+    lines.push('（未声明；实现者需在开工会上确认端口、启动命令、健康检查与迁移方式）', '')
+  } else {
+    lines.push(...table(['项', '内容'], runtimeRows), '')
+  }
+
+  const nfr = plan.globals.nfr ?? []
+  lines.push('### 8.2 非功能要求', '')
+  lines.push(...listOrNone(nfr), '')
 
   // 9
   lines.push('## 9 交付清单', '')

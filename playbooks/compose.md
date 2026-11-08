@@ -98,11 +98,12 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `goals` | 可验收的目标，至少 1 条 | `用户可用手机验证码登录` | `做好登录` |
 | `nonGoals` | 明确不做的事 | `不接企业微信` | `无` |
 | `boundaries` | 外部依赖及失败策略 | `{dependency:"postgres",purpose:"存用户",fallback:"启动失败并报错"}` | `{dependency:"db"}` |
-| `globals` | 全局约定/禁止/envKeys，可给统一 `errorShape` | `envKeys:["DATABASE_URL"]` | 省略 envKeys |
+| `globals` | 全局约定/禁止/envKeys/非功能要求，可给统一 `errorShape` | `{conventions:[...],forbidden:[...],envKeys:["DATABASE_URL"],nfr:["登录每 IP 每分钟 10 次","P95 < 300ms"]}` | 省略 envKeys；把限流写成散文 |
 | `data` | 表、字段、建表模块与运行时写入方，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
 | `types` | 契约里用到的类型定义（可选） | `{name:"User",kind:"object",fields:[…]}` | 只写类型名不写字段 |
 | `errors` | 错误码目录（可选，但被引用就必须声明）；建议每条写 `by`（哪个模块抛出它） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误",shape:"{\"error\":{\"code\",\"message\"}}",by:"M1"}` | 只写 `E_` 前缀 |
-| `http` | 对外路由（可选）；`auth` 写明 `public`/`session`/`admin`，无响应体写 `res:"void"` | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair",auth:"public"}` | 路径不写 `/` |
+| `http` | 对外路由（可选）；`auth` 写明 `public`/`session`/`admin`，无响应体写 `res:"void"`；建议附 `reqExample`/`resExample`（真实 JSON 报文） | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair",auth:"public",reqExample:"{\"account\":\"a\"}",resExample:"{\"accessToken\":\"t\"}"}` | 路径不写 `/`；示例用单引号或省略字段名 |
+| `runtime` | 被设计系统怎么运行：`port`/`start`/`health`/`migrate`/`rollback`（可选，但强烈建议） | `{port:"8080",start:"pnpm start",health:"/healthz",migrate:"pnpm migrate"}` | 只写「能跑起来就行」 |
 | `flows` | 跨模块调用顺序（可选，但强烈建议）：谁在什么触发下按什么顺序调谁 | `{id:"F1",name:"登录",trigger:"POST /auth/login",steps:[{module:"M3",action:"login"},{module:"M2",action:"verifyPassword"}],success:"返回 TokenPair",failure:["E_AUTH_INVALID"]}` | 只写「先查用户再验密码」这种散文 |
 | `openQuestions` | 自己拿不准、需要人裁决的点 | `["token 是否要支持刷新"]` | 用注释代替 |
 | `modules` | 模块数组，至少 1 个 | 见下 | 没有模块 |
