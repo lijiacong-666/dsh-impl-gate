@@ -46,6 +46,25 @@ export interface PlanHttp {
   auth?: 'public' | 'session' | 'admin'
 }
 
+export interface PlanFlowStep {
+  module: string
+  /** Must name an expose of that module (first identifier of the signature). */
+  action: string
+  note?: string
+}
+
+export interface PlanFlow {
+  id: string
+  name: string
+  /** What starts it: `POST /auth/login`, `cron: 0 2 * * *`, `user: 点击归档`. */
+  trigger: string
+  steps: PlanFlowStep[]
+  /** Observable outcome when every step succeeds. */
+  success: string
+  /** Error codes this flow can surface, in the order they can appear. */
+  failure?: string[]
+}
+
 export interface Plan {
   schemaVersion: 1
   name: string
@@ -87,6 +106,8 @@ export interface Plan {
   types?: PlanType[]
   errors?: PlanError[]
   http?: PlanHttp[]
+  /** Cross-module call orders: who calls whom, in what order, on which trigger. */
+  flows?: PlanFlow[]
   openQuestions?: string[]
   deliverables: { tree: string; files: Array<{ path: string; purpose: string }> }
 }
@@ -115,6 +136,7 @@ const ROOT_KEYS = new Set([
   'types',
   'errors',
   'http',
+  'flows',
   'openQuestions',
   'deliverables',
 ])
@@ -142,6 +164,8 @@ const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note']
 const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
 const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape', 'by'])
 const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth'])
+const FLOW_KEYS = new Set(['id', 'name', 'trigger', 'steps', 'success', 'failure'])
+const FLOW_STEP_KEYS = new Set(['module', 'action', 'note'])
 const AUTH_MODES = new Set(['public', 'session', 'admin'])
 
 const TYPE_KINDS = new Set(['object', 'enum', 'union', 'external'])
@@ -709,6 +733,71 @@ function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>,
   })
 }
 
+function validateFlows(raw: unknown, modulesRaw: unknown, errorCodes: Set<string>, problems: PlanProblem[]): void {
+  if (raw === undefined) return
+  if (!Array.isArray(raw)) {
+    problem(problems, '/flows', 'must be an array when present')
+    return
+  }
+  const modules = Array.isArray(modulesRaw) ? modulesRaw : []
+  const seen = new Set<string>()
+  raw.forEach((entry, index) => {
+    const at = pointer('/flows', index)
+    if (!isRecord(entry)) {
+      problem(problems, at, 'must be an object')
+      return
+    }
+    checkKnownKeys(entry, FLOW_KEYS, at, problems)
+    const id = readString(entry.id, pointer(at, 'id'), problems)
+    if (id.length > 0) {
+      if (!/^F[0-9]{1,2}$/.test(id)) problem(problems, pointer(at, 'id'), 'must match ^F[0-9]{1,2}$')
+      if (seen.has(id)) problem(problems, pointer(at, 'id'), `duplicate flow id "${id}"`)
+      seen.add(id)
+    }
+    readString(entry.name, pointer(at, 'name'), problems)
+    readString(entry.trigger, pointer(at, 'trigger'), problems)
+    readString(entry.success, pointer(at, 'success'), problems)
+    const steps = readNonEmptyArray(entry.steps, pointer(at, 'steps'), problems, 'at least one step')
+    steps.forEach((step, stepIndex) => {
+      const stepAt = `${pointer(at, 'steps')}/${stepIndex}`
+      if (!isRecord(step)) {
+        problem(problems, stepAt, 'must be an object')
+        return
+      }
+      checkKnownKeys(step, FLOW_STEP_KEYS, stepAt, problems)
+      const moduleId = readString(step.module, `${stepAt}/module`, problems)
+      const action = readString(step.action, `${stepAt}/action`, problems)
+      if (moduleId.length === 0) return
+      const target = modules.find((candidate): candidate is Json => isRecord(candidate) && candidate.id === moduleId)
+      if (target === undefined) {
+        problem(problems, `${stepAt}/module`, `module "${moduleId}" does not exist`)
+        return
+      }
+      if (action.length === 0) return
+      const exposes = Array.isArray(target.exposes) ? target.exposes : []
+      const matches = exposes.some((expose) => {
+        const signature = isRecord(expose) && typeof expose.signature === 'string' ? expose.signature : ''
+        return (HANDLER_RE.exec(signature.trim())?.[0] ?? '') === action
+      })
+      if (!matches) {
+        problem(
+          problems,
+          `${stepAt}/action`,
+          `action "${action}" does not match the leading identifier of any signature of ${moduleId}`,
+        )
+      }
+    })
+    if (entry.failure !== undefined) {
+      const codes = readStringArray(entry.failure, `${at}/failure`, problems)
+      codes.forEach((code, codeIndex) => {
+        if (!errorCodes.has(code)) {
+          problem(problems, `${at}/failure/${codeIndex}`, `error code "${code}" is not declared in errors`)
+        }
+      })
+    }
+  })
+}
+
 /**
  * Rule 1: every capitalised identifier in a signature, an http req/res or a
  * type field must be a declared type or a built-in. Reports every unknown
@@ -1203,6 +1292,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
   validateMigrationFiles(raw.data, raw.modules, problems)
   validateNotNullColumns(raw.data, raw.modules, raw.types, problems)
   validateHttp(raw.http, raw.modules, new Set(typeNames), problems)
+  validateFlows(raw.flows, raw.modules, new Set(errorCodes), problems)
   validateAcceptanceRoutes(raw.modules, raw.http, problems)
   validateTypeClosure(raw, new Set(typeNames), problems)
   validateErrorRefs(raw.modules, new Set(errorCodes), problems)

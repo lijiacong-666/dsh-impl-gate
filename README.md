@@ -141,6 +141,8 @@ dsh plugin --profile headless add dsh-impl-gate
 
 **目标编号与覆盖缺口**：`SPEC.md` 第 1 节把每个目标渲染成 `G1…`，模块验收条目用 `acceptance[].covers:"G3"` 指回来；有 goal 没被任何 AC 覆盖时，第 6 节表格下方会打印「覆盖缺口：G3 没有验收断言对应的 `covers`」，方便开工会上补。
 
+**关键流程（0.3.1）**：`flows[]` 写跨模块调用顺序——`{id:"F1",name,trigger,steps:[{module,action,note?}],success,failure?}`。`action` 必须是该模块某条 expose 签名的首标识符，`failure` 里的码必须在 `errors` 中声明；生成后出现在 `SPEC.md` 5.1 节，任务卡 4.2 节会写「你在第几步」。
+
 **契约字段（0.3.0）**：`http[].auth` 三选一 `public|session|admin`（缺省按 `public` 渲染）、`res:"void"` 渲染成「204（无响应体）」；`errors[].by` 写抛出模块 id，4.3 打印「归属模块」列，模块不存在会报 `/errors/<i>/by: module "M9" does not exist`。
 
 **验收表骨架**：materialize 会按 `checks/impl-gate.checks.json` 写 `.impl-gate/checklist.md`——32 行、全是 `NOT-RUN / NOT_IMPLEMENTED`、evidence 指向 `SPEC.md:1`，并带 `## 未覆盖` 段。用 `impl_gate_check` 配 `implRoot=<outDir>` 跑一次，设计阶段能判的 A1–A5、B2、B7、Q10 会直接给出结论（实测 `PASS 8 / FAIL 0 / NOT-RUN 24`）；其余行等实现证据。

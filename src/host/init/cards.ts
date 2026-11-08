@@ -103,6 +103,21 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
     lines.push('本模块的约束会触发以下错误码：', '')
     for (const code of errorCodes) lines.push(`- \`${code}\``)
   }
+  const myFlows = (plan.flows ?? [])
+    .map((flow) => {
+      const positions = flow.steps
+        .map((step, index) => (step.module === module.id ? index + 1 : 0))
+        .filter((position) => position > 0)
+      return { flow, positions }
+    })
+    .filter((entry) => entry.positions.length > 0)
+  if (myFlows.length > 0) {
+    lines.push('', '### 4.2 你在流程中的位置', '')
+    for (const { flow, positions } of myFlows) {
+      const total = flow.steps.length
+      lines.push(`- \`${flow.id}\` ${flow.name}：第 ${positions.join('、')}/${total} 步（触发：${flow.trigger}）`)
+    }
+  }
   lines.push('', '## 5 约束', '')
   if (module.constraints.length === 0) {
     lines.push(`- ${NONE}`)

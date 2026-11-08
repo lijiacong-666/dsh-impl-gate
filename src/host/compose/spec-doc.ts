@@ -196,6 +196,28 @@ export function renderSpecDoc(input: SpecDocInput): string {
     lines.push(...table(['从', '到', '需要条目（原文）', '提供条目（原文）'], links), '')
   }
 
+  const flows = plan.flows ?? []
+  if (flows.length > 0) {
+    lines.push('### 5.1 关键流程（时序）', '')
+    lines.push('每一步都只能通过目标模块 `## 3` 里列出的签名调用；顺序即调用顺序。', '')
+    for (const flow of flows) {
+      lines.push(`#### ${flow.id} ${flow.name}`, '')
+      lines.push(`- 触发：${flow.trigger}`)
+      lines.push(`- 成功结果：${flow.success}`)
+      if (flow.failure !== undefined && flow.failure.length > 0) {
+        lines.push(`- 失败可能：${flow.failure.join('、')}`)
+      }
+      lines.push('')
+      flow.steps.forEach((step, index) => {
+        const owner = byId.get(step.module)
+        const dir = owner === undefined ? step.module : owner.dir
+        const note = step.note === undefined || step.note.length === 0 ? '' : `　— ${step.note}`
+        lines.push(`${index + 1}. \`${dir}\`：${step.action}${note}`)
+      })
+      lines.push('')
+    }
+  }
+
   // 6
   lines.push('## 6 验收标准', '')
   const acceptance: string[][] = []

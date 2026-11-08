@@ -103,6 +103,7 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `types` | 契约里用到的类型定义（可选） | `{name:"User",kind:"object",fields:[…]}` | 只写类型名不写字段 |
 | `errors` | 错误码目录（可选，但被引用就必须声明）；建议每条写 `by`（哪个模块抛出它） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误",shape:"{\"error\":{\"code\",\"message\"}}",by:"M1"}` | 只写 `E_` 前缀 |
 | `http` | 对外路由（可选）；`auth` 写明 `public`/`session`/`admin`，无响应体写 `res:"void"` | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair",auth:"public"}` | 路径不写 `/` |
+| `flows` | 跨模块调用顺序（可选，但强烈建议）：谁在什么触发下按什么顺序调谁 | `{id:"F1",name:"登录",trigger:"POST /auth/login",steps:[{module:"M3",action:"login"},{module:"M2",action:"verifyPassword"}],success:"返回 TokenPair",failure:["E_AUTH_INVALID"]}` | 只写「先查用户再验密码」这种散文 |
 | `openQuestions` | 自己拿不准、需要人裁决的点 | `["token 是否要支持刷新"]` | 用注释代替 |
 | `modules` | 模块数组，至少 1 个 | 见下 | 没有模块 |
 | `deliverables` | 交付树与文件清单 | `{tree:"...",files:[{path,purpose}]}` | 只写 tree |
@@ -129,6 +130,26 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 ## 类型、错误码与接口面
 
 盲测的失败点几乎都在这三块：签名只写了类型名、错误码没有目录、HTTP 面没有路径与响应体。下面三段是可直接抄的最小写法。
+
+### flows：把「先查用户再验密码」写成可检查的顺序
+
+散文描述调用顺序，读者只能猜谁先谁后、失败从哪一步出去。`flows` 把它写成有序步骤，每步的 `action` 必须是该模块某条 expose 签名的首标识符：
+
+```json
+"flows": [
+  { "id": "F1", "name": "账号密码登录",
+    "trigger": "POST /auth/login",
+    "steps": [
+      { "module": "M3", "action": "login", "note": "只做编排与响应" },
+      { "module": "M1", "action": "findUser", "note": "查不到按 E_AUTH_INVALID 处理" },
+      { "module": "M2", "action": "verifyPassword" }
+    ],
+    "success": "返回 TokenPair",
+    "failure": ["E_AUTH_INVALID"] }
+]
+```
+
+规则：`id` 形如 `F1`；`steps` 至少一步；`module` 必须存在、`action` 必须能在该模块签名里找到；`failure` 里的码必须在 `errors` 里声明。生成后写进 `SPEC.md` 的 5.1 节，任务卡 4.2 节会告诉每个模块「你在第几步」。
 
 ### types：把类型名变成可实现的字段表
 
