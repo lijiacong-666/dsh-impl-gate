@@ -531,6 +531,8 @@ export interface ComposePayload {
   files?: string[]
   waves?: Array<{ index: number; modules: string[]; dependsOn: string[] }>
   overlaps?: Array<{ a: string; b: string; files: string[] }>
+  /** Set when `mode:"plan" + overwrite:true` moved an existing plan aside. */
+  backupPath?: string
 }
 
 /** G8: the verdict scale a reviewer must apply to every module of SPEC.md. */
@@ -573,7 +575,8 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
   const outDirRaw = typeof args.outDir === 'string' ? args.outDir.trim() : ''
   if (outDirRaw.length === 0) return fail('E_OUT_DIR_REQUIRED', 'outDir is required')
 
-  const mode = args.mode === 'materialize' ? 'materialize' : 'plan'
+  const mode =
+    args.mode === 'materialize' ? 'materialize' : args.mode === 'draft' ? 'draft' : 'plan'
   if (mode === 'materialize') {
     const toolHome = typeof args.specgraphCwd === 'string' ? args.specgraphCwd.trim() : ''
     const materializeConfig = toolHome.length > 0 ? { ...config, specgraphCwd: toolHome } : config
@@ -610,33 +613,71 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
   }
 
   const outDir = path.resolve(outDirRaw)
+  const planPath = path.join(outDir, 'compose-plan.json')
+  const draftPath = path.join(outDir, 'SPEC-DRAFT.md')
+  const requirement = typeof args.requirement === 'string' ? args.requirement : undefined
+
+  let existingPlan: unknown
   try {
-    const stat = await fs.promises.stat(outDir)
-    if (!stat.isDirectory()) {
-      return fail('E_OUT_DIR_NOT_EMPTY', `outDir exists and is not a directory: ${outDir}`)
-    }
-    const entries = await fs.promises.readdir(outDir)
-    if (entries.length > 0 && args.overwrite !== true) {
-      return fail(
-        'E_OUT_DIR_NOT_EMPTY',
-        `outDir is not empty: ${outDir}`,
-        `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}; pass overwrite:true to replace compose-plan.json and SPEC-DRAFT.md`,
-      )
-    }
+    existingPlan = JSON.parse(await fs.promises.readFile(planPath, 'utf8')) as unknown
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code !== 'ENOENT') return failureFrom(error)
   }
 
   await fs.promises.mkdir(outDir, { recursive: true })
-  const planPath = path.join(outDir, 'compose-plan.json')
-  const draftPath = path.join(outDir, 'SPEC-DRAFT.md')
+
+  // `draft` refreshes SPEC-DRAFT.md from whatever plan is on disk and never
+  // writes the plan. Before 0.3.0 the only documented way to refresh the draft
+  // was `mode:"plan" + overwrite:true`, which silently replaced a filled plan
+  // with an empty template — the most expensive bug found in the 0.2.x review.
+  if (mode === 'draft') {
+    const source =
+      existingPlan ??
+      emptyPlan({
+        name: typeof args.name === 'string' ? args.name : undefined,
+        stack: typeof args.stack === 'string' ? args.stack : undefined,
+      })
+    await fs.promises.writeFile(draftPath, renderDraft({ plan: source, requirement }), 'utf8')
+    return {
+      ok: true,
+      mode: 'draft',
+      planPath: existingPlan === undefined ? '' : planPath,
+      draftPath,
+      missingSlots: missingSlots(source),
+      problems: [],
+      review: composeReview(outDir),
+    }
+  }
+
+  const entries = await fs.promises.readdir(outDir)
+  const allowed = new Set(['compose-plan.json', 'SPEC-DRAFT.md'])
+  const unexpected = entries.filter((entry) => !allowed.has(entry))
+  if (unexpected.length > 0 && args.overwrite !== true) {
+    return fail(
+      'E_OUT_DIR_NOT_EMPTY',
+      `outDir is not empty: ${outDir}`,
+      `${unexpected.length} entr${unexpected.length === 1 ? 'y' : 'ies'} other than compose-plan.json/SPEC-DRAFT.md; pass overwrite:true only if you mean to write into it`,
+    )
+  }
+  if (existingPlan !== undefined && args.overwrite !== true) {
+    return fail(
+      'E_PLAN_EXISTS',
+      `compose-plan.json already exists: ${planPath}`,
+      'use mode:"draft" to refresh SPEC-DRAFT.md without touching the plan, or overwrite:true to reset the plan (a timestamped backup is written first)',
+    )
+  }
 
   const template = emptyPlan({
     name: typeof args.name === 'string' ? args.name : undefined,
     stack: typeof args.stack === 'string' ? args.stack : undefined,
   })
-  const requirement = typeof args.requirement === 'string' ? args.requirement : undefined
+  let backupPath = ''
+  if (existingPlan !== undefined) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '')
+    backupPath = path.join(outDir, `compose-plan.backup-${stamp}.json`)
+    await fs.promises.rename(planPath, backupPath)
+  }
   await fs.promises.writeFile(planPath, `${JSON.stringify(template, null, 2)}\n`, 'utf8')
   await fs.promises.writeFile(draftPath, renderDraft({ plan: template, requirement }), 'utf8')
 
@@ -648,6 +689,7 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
     missingSlots: missingSlots(template),
     problems: [],
     review: composeReview(outDir),
+    ...(backupPath === '' ? {} : { backupPath }),
   }
 }
 
@@ -658,16 +700,22 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
 export function buildInit(rawArgs: unknown): InitPayload | InitFailure {
   const args = (rawArgs ?? {}) as Record<string, unknown>
   const outDir = typeof args.outDir === 'string' ? args.outDir.trim() : ''
-  if (outDir.length === 0) return { ok: false, code: 'E_ROOT_MISSING', message: 'outDir is required' }
+  if (outDir.length === 0) {
+    return { ok: false, error: { code: 'E_ROOT_MISSING', message: 'outDir is required' } }
+  }
   const implRoot = typeof args.implRoot === 'string' ? args.implRoot : ''
   const overwrite = args.overwrite === true
   return initTasks(outDir, { implRoot, overwrite })
 }
 
 function renderInit(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
-  const payload = value as Partial<Omit<InitPayload, 'ok'>> & { ok?: boolean; code?: string; message?: string }
+  const payload = value as Partial<Omit<InitPayload, 'ok'>> & {
+    ok?: boolean
+    error?: { code: string; message: string }
+  }
   if (payload.ok !== true) {
-    return [{ type: 'text', text: `impl_gate_init failed: ${payload.code ?? ''} — ${payload.message ?? ''}` }]
+    const error = payload.error
+    return [{ type: 'text', text: `impl_gate_init failed: ${error?.code ?? ''} — ${error?.message ?? ''}` }]
   }
   const lines = [
     `impl_gate_init: ${payload.tasksDir ?? ''}`,
@@ -721,7 +769,18 @@ function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; te
     return [{ type: 'text', text: lines.join('\n') }]
   }
   const slots = payload.missingSlots ?? []
-  const lines = [`impl_gate_compose ${payload.mode ?? ''}: ${payload.planPath ?? ''}`, `draft: ${payload.draftPath ?? ''}`]
+  const lines =
+    payload.mode === 'draft'
+      ? [`impl_gate_compose draft: ${payload.draftPath ?? ''}`]
+      : [`impl_gate_compose ${payload.mode ?? ''}: ${payload.planPath ?? ''}`, `draft: ${payload.draftPath ?? ''}`]
+  if (payload.mode === 'draft') {
+    lines.push(
+      payload.planPath === ''
+        ? 'note: no compose-plan.json yet; draft rendered from an empty template'
+        : 'note: SPEC-DRAFT.md refreshed from the existing plan; the plan was not touched',
+    )
+  }
+  if (payload.backupPath !== undefined) lines.push(`previous plan moved to: ${payload.backupPath}`)
   lines.push(slots.length === 0 ? 'missingSlots: none' : `missingSlots (${slots.length}): ${slots.join(' | ')}`)
   lines.push(reviewLine(payload.review))
   return [{ type: 'text', text: lines.join('\n') }]
@@ -862,10 +921,14 @@ const composeParameters = {
     stack: { type: 'string', description: '技术栈描述，例如 "node22+fastify+react+pg"。' },
     mode: {
       type: 'string',
-      enum: ['plan', 'materialize'],
-      description: 'plan=写空槽模板与草稿；materialize=物化图谱与九节 SPEC.md（0.2.0-G2 起可用）。',
+      enum: ['plan', 'draft', 'materialize'],
+      description:
+        'plan=首次写空槽模板与草稿（已有 plan 时拒绝，除非 overwrite:true）；draft=只按现有 plan 刷新 SPEC-DRAFT.md，绝不改 plan；materialize=物化图谱与九节 SPEC.md。',
     },
-    overwrite: { type: 'boolean', description: 'outDir 非空时是否覆盖 compose-plan.json 与 SPEC-DRAFT.md，默认 false。' },
+    overwrite: {
+      type: 'boolean',
+      description: 'plan 模式：已有 compose-plan.json 时允许重置（先写时间戳备份）。materialize 不受影响。默认 false。',
+    },
     specgraphCwd: {
       type: 'string',
       description: '本次调用覆盖配置里的 specgraphCwd（spec-graph 源码目录）；缺省按配置、向上查找、SPECGRAPH_HOME 依次解析。',
@@ -911,6 +974,7 @@ const composeOutputSchema = {
     packageMd: { type: 'string' },
     manifestPath: { type: 'string' },
     files: { type: 'array', items: { type: 'string' } },
+    backupPath: { type: 'string' },
     waves: {
       type: 'array',
       items: {

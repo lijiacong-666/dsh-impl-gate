@@ -101,7 +101,7 @@
       "exposes": [{ "kind": "fn", "signature": "createUser(phone: string): Promise<User>", "note": "首次登录建号" }],
       "requires": [{ "module": "M1", "item": "openDb(url: string): Promise<Pool>", "why": "写 users 表" }],
       "constraints": ["手机号唯一", "邮箱冲突返回 409"],
-      "files": ["user-service/create.ts"],
+      "files": ["user-service/create.ts", "user-service/migrations/001_users.sql"],
       "acceptance": [{ "id": "user-create", "assertion": "重复手机号返回已有用户，不新建", "test": "pnpm test user-service" }]
     },
     {

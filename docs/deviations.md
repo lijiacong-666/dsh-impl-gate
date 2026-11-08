@@ -21,6 +21,9 @@
 | D-15 | G7 新增的三类校验（`data[].rowWriters`、AC 路由闭合、`errors[].shape`）只判「结构自洽」，不判「语义正确」，版本不升 | 工具能查「表有没有运行时写入方、AC 里的路由有没有声明、错误码有没有响应体形状」，查不出「写入方是否真被调用、路由语义是否实现、形状是否贴合业务」；后者仍需人工审阅 SPEC | 已批（用户 G7 指令） |
 | D-16 | G8 的必填列覆盖校验是启发式：列名 snake_case→camelCase 后，只在该表 `rowWriters` 模块的 `exposes[].signature` 里找同名字段（对象类型的 `fields` 或参数名本身） | 只能证明「签名里有这个字段的入口」，不能证明实现真的把它写进 INSERT；嵌套 input 类型不展开、`Omit`/`Partial` 包装按严格处理，因此可能**低估**缺口；但含 `default` 的列直接豁免，不会误伤 `created_at` 这类由数据库填值的列；反向也可能**误报**——由代码显式填值却没有 `default` 的列（如 `synced_at`），校验器看不到代码，需在入参类型或 `default` 里声明 | 已批（用户 G8 指令） |
 
+| D-17 | `impl_gate_compose` 的 `plan` 模式不再覆盖已有 `compose-plan.json`：未传 `overwrite:true` 返回 `E_PLAN_EXISTS`；新增 `mode:"draft"` 只刷新 `SPEC-DRAFT.md`；`overwrite:true` 先写 `compose-plan.backup-<时间戳>.json` | 0.3.0 前 `plan` 会直写空模板，配合 playbook「plan 已存在也能调 plan」的旧写法，实际等于删掉用户已填的设计（改进清单 1.1，`tools.ts:619/635`） | 已按实际行为关闭 |
+| D-18 | 有 `owner` 的表要求 owner 模块的 `files` 里出现 `migrations/*.sql`，否则 `PLAN_INVALID` | 0.3.0 前迁移归属只写在 playbook，`grep -r migration src/host/compose/*.ts` 为 0 处；盲测显示建表 DDL 无人认领、六个模块各写一份 | 已按实际行为关闭 |
+
 ## 维护规则
 
 1. 新增偏离：在本表加一行，同时在任务书 §10 加同一行；两处必须同步。

@@ -32,7 +32,7 @@ function basePlan() {
         exposes: [{ kind: 'http', signature: 'login(account: string, password: string): Promise<Order>' }],
         requires: [],
         constraints: ['登录失败返回 401'],
-        files: ['src/auth/api.ts'],
+        files: ['src/auth/api.ts', 'src/auth/migrations/001_users.sql'],
         acceptance: [{ id: 'AC-1', assertion: '错误密码返回 401', test: '集成测试' }],
       },
       {

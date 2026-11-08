@@ -48,7 +48,7 @@ function plan() {
         exposes: [{ kind: 'fn', signature: 'createOrder' }],
         requires: [{ module: 'M1', item: 'Db', why: '写库' }],
         constraints: ['金额不可为负'],
-        files: ['orders/create.ts'],
+        files: ['orders/create.ts', 'orders/migrations/001_orders.sql'],
         acceptance: [
           { id: 'a2', assertion: '重复下单幂等', test: 'pnpm test orders' },
           { id: 'a3', assertion: '金额校验', test: 'pnpm test orders' },
@@ -94,7 +94,7 @@ test('module table has one row per module with <br> for multiple items', () => {
   const { doc } = render()
   const section = doc.split('## 3 模块清单')[1].split('## 4 数据结构')[0]
   assert.match(section, /\| M1 \| shared \| 基础能力 \| Db<br>Clock \| （无） \| shared\/db\.ts<br>shared\/clock\.ts \|/)
-  assert.match(section, /\| M2 \| orders \| 下单 \| createOrder \| Db \| orders\/create\.ts \|/)
+  assert.match(section, /\| M2 \| orders \| 下单 \| createOrder \| Db \| orders\/create\.ts<br>orders\/migrations\/001_orders\.sql \|/)
 })
 
 test('data section renders one column table per table with its owner', () => {

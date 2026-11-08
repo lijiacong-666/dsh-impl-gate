@@ -27,7 +27,7 @@ impl_gate_compose({
 
 ### 第 2 步：填 plan
 
-只改 `compose-plan.json`，不要改草稿。字段写法见下一节。填完可用 plan 模式重跑一次 `overwrite: true` 刷新草稿，或直接进第 3 步（materialize 会先校验）。
+只改 `compose-plan.json`，不要改草稿。字段写法见下一节。想让草稿跟着 plan 刷新，用 `mode:"draft"`——它只重写 `SPEC-DRAFT.md`，绝不碰 plan。不要再调 `mode:"plan"`：plan 已存在时它会直接拒绝（`E_PLAN_EXISTS`），除非显式 `overwrite:true`，而那会先把旧 plan 备份成 `compose-plan.backup-<时间戳>.json` 再重置。也可以直接进第 3 步（materialize 会先校验）。
 
 ### 第 3 步：materialize 出图谱、SPEC 与导出
 

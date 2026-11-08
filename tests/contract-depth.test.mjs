@@ -55,7 +55,7 @@ function basePlan() {
         ],
         requires: [],
         constraints: ['账号或密码错误时返回 E_AUTH_INVALID'],
-        files: ['auth/login.ts'],
+        files: ['auth/login.ts', 'auth/migrations/001_members.sql'],
         acceptance: [
           { id: 'a1', assertion: '错误密码返回 E_AUTH_INVALID', test: 'pnpm test auth', covers: 'G1' },
         ],

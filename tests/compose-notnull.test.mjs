@@ -80,7 +80,7 @@ function basePlan() {
         'M1',
         'booking-service',
         [fnExpose('createBooking(input: BookingInput): Promise<Booking>')],
-        ['booking-service/index.ts'],
+        ['booking-service/index.ts', 'booking-service/migrations/001_bookings.sql'],
       ),
     ],
     deliverables: { tree: 'notnull-demo/', files: [{ path: 'booking-service/index.ts', purpose: '预约写入' }] },

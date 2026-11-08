@@ -29,13 +29,13 @@ export interface InitPayload {
 
 export interface InitFailure {
   ok: false
-  code: string
-  message: string
+  /** Same shape as a failed compose call: {code, message, detail?}. */
+  error: { code: string; message: string; detail?: string }
   filesWritten?: string[]
 }
 
 function failure(code: string, message: string): InitFailure {
-  return { ok: false, code, message }
+  return { ok: false, error: { code, message } }
 }
 
 function relativePosix(root: string, target: string): string {

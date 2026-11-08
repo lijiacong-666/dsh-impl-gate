@@ -61,7 +61,7 @@ function basePlan() {
         exposes: [{ kind: 'fn', signature: 'createMember(openId: string): Promise<Member>' }],
         requires: [],
         constraints: ['openId 唯一'],
-        files: ['members/create.ts'],
+        files: ['members/create.ts', 'members/migrations/001_members.sql'],
         acceptance: [{ id: 'member-create', assertion: '重复 openId 返回已有成员，不新建', test: 'pnpm test members' }],
       },
       {
@@ -72,7 +72,7 @@ function basePlan() {
         exposes: [{ kind: 'http', signature: 'listBookmarks(memberId: string): Promise<Bookmark>' }],
         requires: [{ module: 'M1', item: 'createMember(openId: string): Promise<Member>', why: '确保成员存在' }],
         constraints: ['只返回当前成员的书签'],
-        files: ['bookmarks/list.ts'],
+        files: ['bookmarks/list.ts', 'bookmarks/migrations/001_bookmarks.sql'],
         acceptance: [{ id: 'bookmark-list', assertion: 'GET /bookmarks 返回当前成员的书签', test: 'pnpm test bookmarks' }],
       },
     ],

@@ -113,7 +113,7 @@ dsh plugin --profile headless add dsh-impl-gate
 | `impl_gate_check` | `graphRoot`（必填）、`implRoot`、`checklistPath`、`slow` | 跑一次；`checklistPath` 缺省 `<implRoot>/.impl-gate/checklist.md` |
 | `impl_gate_report` | `root`（必填）、`runId` | 读缓存汇总；无 `runId` 时取该根最近一次运行 |
 | `impl_gate_verify_contract` | `root`（必填）、`runId` | 只复核 A1–A5，不重跑其他断言 |
-| `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`；`materialize` 生成图谱、`SPEC.md` 与 `export/` |
+| `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`（plan 已存在则 `E_PLAN_EXISTS`，不会覆盖）；`draft` 只按现有 plan 刷新 `SPEC-DRAFT.md`，从不写 plan；`materialize` 生成图谱、`SPEC.md` 与 `export/` |
 | `impl_gate_init` | `outDir`（必填）、`implRoot`、`overwrite` | 按波次生成 `<outDir>/tasks/`：`TASKS.md`、`cards.json`、`wave-<n>/<id>-<dir>.md`；不改图谱、`SPEC.md`、`export/` |
 
 ### `impl_gate_compose` 的输出结构
@@ -132,6 +132,10 @@ dsh plugin --profile headless add dsh-impl-gate
 ```
 
 `SPEC.md` 放在 `outDir` 根而不是图根：spec-graph 在 Windows 上大小写不敏感，图根里的 `SPEC.md` 会被当成根节点 `spec.md`，触发 `SECTION_MISSING`、`IMPL_LANGUAGE` 等误报。`ownership` 会登记它，spec-graph 的 `check` 看不到它（预期），见偏离 D-13。
+
+**填 plan 的安全循环**：`mode:"plan"` 只在目录为空时生成模板；第二次调用会返回 `E_PLAN_EXISTS` 而不是覆盖。要边写边看草稿，用 `mode:"draft"`——它按现有 plan 重写 `SPEC-DRAFT.md`，从不写 plan。确实要从头再来时才用 `plan` + `overwrite:true`，旧的 plan 会先备份成 `compose-plan.backup-<YYYYMMDDTHHMMSS>.json`。
+
+**迁移文件归属**：每张有 `owner` 的表，其 owner 模块的 `files` 里必须出现一个 `migrations/*.sql`（如 `user-service/migrations/001_users.sql`），否则 `validatePlan` 报 `/data/<i>/owner: owner module "M2" of table "users" has no migration file`。这保证建表 DDL 有唯一归属，不会被六个模块各写一份。
 
 ### 配置
 
@@ -164,6 +168,12 @@ dsh plugin --profile headless add dsh-impl-gate
 | `E_INTERNAL_INCONSISTENT` | 32 条分区不干净，或未覆盖集合与 NOT-RUN 不一致 |
 | `PYTHON_ENV_MISSING` | 解释器导入不了 specgraph（compose 写盘前 preflight 失败；check/export 返回非 JSON 失败） |
 | `PLAN_HAS_CYCLE` | `impl_gate_init`：plan 的模块依赖成环；由 `validatePlan` 的环检测转出，`code` 是原因串而非 §5 错误码，message 带 `A → B → A` |
+| `E_PLAN_EXISTS` | `impl_gate_compose` 的 `plan` 模式：`compose-plan.json` 已存在且未传 `overwrite:true`。用 `mode:"draft"` 刷新草稿，或显式 `overwrite:true`（会先写 `compose-plan.backup-<时间戳>.json`） |
+| `E_OUT_DIR_NOT_EMPTY` | `outDir` 里已有合同之外的文件；只允许 `compose-plan.json` 与 `SPEC-DRAFT.md` |
+| `PLAN_INVALID` | plan 没填或填错；`problems[]` 逐条带 JSON Pointer，例如 `/stack must be a non-empty string`、`/data/0/owner must be a non-empty string` |
+| `PLAN_MISSING` | `materialize` 与 `init` 找不到 `compose-plan.json` |
+| `GRAPH_INVALID` | 物化出的图没过 spec-graph 的 check，`graphIssues` 原样返回 |
+| `EXPORT_REFUSED` | 图不合法，或 `init` 的目标目录已存在（加 `overwrite:true`） |
 
 | NOT-RUN reason | 触发场景 |
 |----------------|----------|

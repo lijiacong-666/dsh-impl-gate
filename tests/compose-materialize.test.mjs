@@ -34,7 +34,7 @@ function basePlan(overrides = {}) {
         exposes: [{ kind: 'fn', signature: 'Db' }],
         requires: [],
         constraints: ['无状态'],
-        files: ['shared/db.ts'],
+        files: ['shared/db.ts', 'shared/migrations/001_users.sql'],
         acceptance: [{ id: 'a1', assertion: '能连', test: 'pnpm test' }],
       },
     ],

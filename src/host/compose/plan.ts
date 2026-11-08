@@ -780,6 +780,41 @@ function validateTableOwners(dataRaw: unknown, modulesRaw: unknown, problems: Pl
   })
 }
 
+/**
+ * Rule 6 (0.3.0): a table is only creatable if its owner carries a migration
+ * file. compose.md promised this since 0.1 but nothing checked it: blind runs
+ * produced owners whose whitelist was pure TypeScript, so the table could
+ * never exist and every downstream query was empty.
+ */
+function validateMigrationFiles(dataRaw: unknown, modulesRaw: unknown, problems: PlanProblem[]): void {
+  const filesById = new Map<string, string[]>()
+  if (Array.isArray(modulesRaw)) {
+    for (const module of modulesRaw) {
+      if (!isRecord(module) || typeof module.id !== 'string' || module.id.length === 0) continue
+      const files = Array.isArray(module.files)
+        ? module.files.filter((file): file is string => typeof file === 'string')
+        : []
+      filesById.set(module.id, files)
+    }
+  }
+  const data = Array.isArray(dataRaw) ? dataRaw : []
+  data.forEach((entry, index) => {
+    if (!isRecord(entry)) return
+    const owner = typeof entry.owner === 'string' ? entry.owner : ''
+    if (owner.length === 0 || !filesById.has(owner)) return
+    const files = filesById.get(owner) ?? []
+    const hasMigration = files.some((file) => /(^|\/)migrations?\/[^/]+\.sql$/i.test(file))
+    if (hasMigration) return
+    const table = typeof entry.table === 'string' ? entry.table : ''
+    const at = pointer(pointer('/data', index), 'owner')
+    problem(
+      problems,
+      at,
+      `owner module "${owner}" of table "${table}" has no migration file; add a "migrations/*.sql" path to its files`,
+    )
+  })
+}
+
 function moduleIdsOf(modulesRaw: unknown): Set<string> {
   const ids = new Set<string>()
   if (!Array.isArray(modulesRaw)) return ids
@@ -1137,6 +1172,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
   const errorCodes = validateErrors(raw.errors, problems, defaultErrorShape)
   validateTableOwners(raw.data, raw.modules, problems)
   validateRowWriters(raw.data, raw.modules, problems)
+  validateMigrationFiles(raw.data, raw.modules, problems)
   validateNotNullColumns(raw.data, raw.modules, raw.types, problems)
   validateHttp(raw.http, raw.modules, new Set(typeNames), problems)
   validateAcceptanceRoutes(raw.modules, raw.http, problems)

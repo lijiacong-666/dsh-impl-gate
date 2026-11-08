@@ -43,7 +43,7 @@ function threeModules() {
       responsibility: '提供数据库句柄',
       exposes: [{ kind: 'fn', signature: 'Db', note: '数据库句柄' }],
       constraints: ['无状态'],
-      files: ['src/db.ts'],
+      files: ['src/db.ts', 'src/migrations/001_users.sql'],
       acceptance: [{ id: 'a1', assertion: '能连数据库', test: 'pnpm test db' }],
     }),
     moduleOf({
@@ -94,7 +94,7 @@ test('three modules produce three waves, three cards, TASKS.md and cards.json', 
   const out = tempOut(makePlan(threeModules()))
   t.after(() => fs.rmSync(out, { recursive: true, force: true }))
   const result = initTasks(out)
-  assert.equal(result.ok, true, result.ok ? '' : result.message)
+  assert.equal(result.ok, true, result.ok ? '' : result.error?.message)
   assert.deepEqual(result.waves.map((wave) => wave.modules), [['M1'], ['M2'], ['M3']])
   assert.deepEqual(result.cards, [
     { moduleId: 'M1', wave: 1, cardPath: 'wave-1/M1-shared.md' },
@@ -148,7 +148,7 @@ test('section 4 resolves the provider signature from the plan', (t) => {
 
 test('same-wave file overlaps are called out in TASKS.md section 2', (t) => {
   const modules = [
-    moduleOf({ id: 'M1', dir: 'a', title: 'A', responsibility: 'a', exposes: [{ kind: 'fn', signature: 'A' }], constraints: ['c1'], files: ['src/x.ts'], acceptance: [{ id: 'a1', assertion: 'x', test: 't' }] }),
+    moduleOf({ id: 'M1', dir: 'a', title: 'A', responsibility: 'a', exposes: [{ kind: 'fn', signature: 'A' }], constraints: ['c1'], files: ['src/x.ts', 'src/migrations/001_users.sql'], acceptance: [{ id: 'a1', assertion: 'x', test: 't' }] }),
     moduleOf({ id: 'M2', dir: 'b', title: 'B', responsibility: 'b', exposes: [{ kind: 'fn', signature: 'B' }], constraints: ['c2'], files: ['src/x.ts'], acceptance: [{ id: 'a2', assertion: 'y', test: 't' }] }),
   ]
   const out = tempOut(makePlan(modules))
@@ -162,15 +162,15 @@ test('same-wave file overlaps are called out in TASKS.md section 2', (t) => {
 
 test('a dependency cycle returns PLAN_HAS_CYCLE and writes nothing', (t) => {
   const modules = [
-    moduleOf({ id: 'M1', dir: 'a', title: 'A', responsibility: 'a', exposes: [{ kind: 'fn', signature: 'A' }], requires: [{ module: 'M2', item: 'B' }], files: ['a.ts'], acceptance: [{ id: 'a1', assertion: 'x', test: 't' }] }),
+    moduleOf({ id: 'M1', dir: 'a', title: 'A', responsibility: 'a', exposes: [{ kind: 'fn', signature: 'A' }], requires: [{ module: 'M2', item: 'B' }], files: ['a.ts', 'src/migrations/001_users.sql'], acceptance: [{ id: 'a1', assertion: 'x', test: 't' }] }),
     moduleOf({ id: 'M2', dir: 'b', title: 'B', responsibility: 'b', exposes: [{ kind: 'fn', signature: 'B' }], requires: [{ module: 'M1', item: 'A' }], files: ['b.ts'], acceptance: [{ id: 'a2', assertion: 'y', test: 't' }] }),
   ]
   const out = tempOut(makePlan(modules))
   t.after(() => fs.rmSync(out, { recursive: true, force: true }))
   const result = initTasks(out)
   assert.equal(result.ok, false)
-  assert.equal(result.code, 'PLAN_HAS_CYCLE')
-  assert.match(result.message, /M1 → M2 → M1/)
+  assert.equal(result.error?.code, 'PLAN_HAS_CYCLE')
+  assert.match(result.error?.message ?? '', /M1 → M2 → M1/)
   assert.equal(fs.existsSync(path.join(out, 'tasks')), false)
 })
 
@@ -224,7 +224,7 @@ test('TASKS.md marks single-module waves 独立 and shared waves 可并行', (t)
   const single = tempOut(makePlan(threeModules()))
   const shared = tempOut(
     makePlan([
-      moduleOf({ id: 'M1', dir: 'a', title: 'A', responsibility: 'a', exposes: [{ kind: 'fn', signature: 'A' }], constraints: ['c1'], files: ['a.ts'], acceptance: [{ id: 'a1', assertion: 'x', test: 't' }] }),
+      moduleOf({ id: 'M1', dir: 'a', title: 'A', responsibility: 'a', exposes: [{ kind: 'fn', signature: 'A' }], constraints: ['c1'], files: ['a.ts', 'src/migrations/001_users.sql'], acceptance: [{ id: 'a1', assertion: 'x', test: 't' }] }),
       moduleOf({ id: 'M2', dir: 'b', title: 'B', responsibility: 'b', exposes: [{ kind: 'fn', signature: 'B' }], constraints: ['c2'], files: ['b.ts'], acceptance: [{ id: 'a2', assertion: 'y', test: 't' }] }),
     ]),
   )
