@@ -42,7 +42,10 @@ const COMMAND_SPLIT = /;\s*|\s+\|\s+/
 
 function commandPayload(evidence: string): string {
   const rest = evidence.replace(/^command:\s*/i, '')
-  return rest.split(COMMAND_SPLIT)[0]?.trim() ?? ''
+  // `exit:N` is metadata for A3, not an argument: replaying
+  // `python -m specgraph check … exit:0` made python exit 2 ("unrecognized arguments").
+  const withoutExit = rest.replace(/\s*\bexit:\s*-?\d+\b.*$/i, '')
+  return (withoutExit.split(COMMAND_SPLIT)[0] ?? '').trim()
 }
 
 export const checkA3: Assertion = async (ctx) => {

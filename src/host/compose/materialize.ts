@@ -1,10 +1,11 @@
-﻿// `mode: "materialize"`: compose-plan.json -> spec-graph root + nine-section
+// `mode: "materialize"`: compose-plan.json -> spec-graph root + nine-section
 // SPEC.md + export/ instruction package. Every judgement about the graph comes
 // from `python -m specgraph check|export`; nothing here re-implements it.
 
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import {
   preflightSpecgraph,
   resolveSpecgraphEnv,
@@ -18,8 +19,14 @@ import { renderGraphToml, renderModuleSpec } from './graph.js'
 import { renderSpecDoc } from './spec-doc.js'
 import { computeWaves, type WavesResult } from '../init/waves.js'
 import { loadChecks } from '../checks.js'
-import { CHECKLIST_REL, renderChecklistTemplate } from './checklist-template.js'
+import { CHECKLIST_REL, mergeChecklist } from './checklist-template.js'
 import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
+
+export interface ComposeWarning {
+  code: 'COVERAGE_GAP' | 'ERROR_OWNER_MISSING' | 'AUTH_UNSPECIFIED'
+  count: number
+  items: string[]
+}
 
 export interface MaterializeConfig {
   specgraphCommand: string
@@ -40,6 +47,12 @@ export interface MaterializePayload {
   files: string[]
   waves: WavesResult['waves']
   overlaps: WavesResult['overlaps']
+  /** sha256 of compose-plan.json as written; check compares it to ownership.json. */
+  planSha256: string
+  /** Rows carried over from the previous checklist because they were PASS/FAIL. */
+  checklistPreserved: string[]
+  checklistBackupPath?: string
+  warnings: ComposeWarning[]
 }
 
 export interface MaterializeFailure {
@@ -88,22 +101,64 @@ async function listFiles(root: string): Promise<string[]> {
   return out
 }
 
-async function readOwnership(outDir: string): Promise<Set<string>> {
+export interface OwnershipRecord {
+  generated: string[]
+  managedBy: string
+  plan_sha256: string
+  generated_at: string
+}
+
+async function readOwnershipRecord(outDir: string): Promise<OwnershipRecord | undefined> {
   try {
     const raw = await fs.promises.readFile(path.join(outDir, OWNERSHIP), 'utf8')
-    const parsed = JSON.parse(raw) as { generated?: unknown }
-    if (!Array.isArray(parsed.generated)) return new Set()
-    return new Set(parsed.generated.filter((entry): entry is string => typeof entry === 'string'))
+    const parsed = JSON.parse(raw) as Partial<OwnershipRecord>
+    if (!Array.isArray(parsed.generated)) return undefined
+    return {
+      generated: parsed.generated.filter((entry): entry is string => typeof entry === 'string'),
+      managedBy: typeof parsed.managedBy === 'string' ? parsed.managedBy : '',
+      plan_sha256: typeof parsed.plan_sha256 === 'string' ? parsed.plan_sha256 : '',
+      generated_at: typeof parsed.generated_at === 'string' ? parsed.generated_at : '',
+    }
   } catch {
-    return new Set()
+    return undefined
   }
 }
 
-async function writeOwnership(outDir: string, generated: string[]): Promise<void> {
+async function writeOwnership(outDir: string, generated: string[], planSha256: string): Promise<void> {
   const file = path.join(outDir, OWNERSHIP)
   await fs.promises.mkdir(path.dirname(file), { recursive: true })
-  const body = { generated: [...generated].sort(), managedBy: 'dsh-impl-gate@0.2' }
+  const body: OwnershipRecord = {
+    generated: [...generated].sort(),
+    managedBy: `dsh-impl-gate@${__PLUGIN_VERSION__}`,
+    plan_sha256: planSha256,
+    generated_at: new Date().toISOString(),
+  }
   await fs.promises.writeFile(file, `${JSON.stringify(body, null, 2)}\n`, 'utf8')
+}
+
+/** sha256 of the plan file on disk, so "plan changed after materialize" is detectable. */
+function hashFile(file: string): string {
+  return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+}
+
+/** Signals a reviewer must not miss: gaps that validatePlan tolerates on purpose. */
+function collectWarnings(plan: Plan): ComposeWarning[] {
+  const out: ComposeWarning[] = []
+  const covered = new Set<string>()
+  for (const module of plan.modules) {
+    for (const item of module.acceptance ?? []) {
+      if (typeof item.covers === 'string' && item.covers !== '') covered.add(item.covers)
+    }
+  }
+  const gap = (plan.goals ?? []).filter((goal, index) => !covered.has(`G${index + 1}`))
+  if (gap.length > 0) {
+    out.push({ code: 'COVERAGE_GAP', count: gap.length, items: gap.map((_, i) => `G${i + 1}`) })
+  }
+  const noOwner = (plan.errors ?? []).filter((entry) => entry.by === undefined || entry.by === '').map((entry) => entry.code)
+  if (noOwner.length > 0) out.push({ code: 'ERROR_OWNER_MISSING', count: noOwner.length, items: noOwner })
+  const noAuth = (plan.http ?? []).filter((entry) => entry.auth === undefined).map((entry) => `${entry.method} ${entry.path}`)
+  if (noAuth.length > 0) out.push({ code: 'AUTH_UNSPECIFIED', count: noAuth.length, items: noAuth })
+  return out
 }
 
 function failure(code: string, message: string, detail?: string): MaterializeFailure {
@@ -213,7 +268,10 @@ export async function materializePlan(
   const target = path.join(outDir, plan.name)
   const exportDir = path.join(outDir, 'export')
   const specFile = path.join(outDir, 'SPEC.md')
-  const registered = await readOwnership(outDir)
+  const planFile = path.join(outDir, 'compose-plan.json')
+  const planSha256 = hashFile(planFile)
+  const previousOwnership = await readOwnershipRecord(outDir)
+  const registered = new Set(previousOwnership?.generated ?? [])
 
   // Idempotency: only files registered in ownership.json may be replaced.
   const existing: string[] = []
@@ -258,7 +316,7 @@ export async function materializePlan(
     await fs.promises.writeFile(full, body, 'utf8')
   }
   // Written before `check` so a failed run can be fixed and re-run in place.
-  await writeOwnership(outDir, generated)
+  await writeOwnership(outDir, generated, planSha256)
 
   const runner = { argv: environment.argv, cwd: environment.cwd, env: environment.env, timeoutMs: config.timeoutMs }
   let checkOutput
@@ -298,12 +356,28 @@ export async function materializePlan(
       return fromError(error)
     }
   }
-  files.set('export/export.md', `${exports.map((entry) => entry.md.trimEnd()).join('\n\n---\n\n')}\n`)
+  // specgraph's per-module export says "语言与结构由实现者自选", which
+  // contradicts the hard file whitelist in tasks/. State the order once, up front.
+  const bundlePreface = [
+    '> 本包由 impl-gate 生成。技术栈以 plan.stack 为准，目录与文件白名单以 `tasks/` 下的任务卡为准；',
+    '> 只有任务卡未提到的内部实现细节才由实现者自选。',
+    '',
+  ].join('\n')
+  files.set('export/export.md', `${bundlePreface}\n${exports.map((entry) => entry.md.trimEnd()).join('\n\n---\n\n')}\n`)
   files.set(
     'export/manifest.json',
     `${JSON.stringify({ schemaVersion: 1, modules: exports.map((entry) => ({ dir: entry.dir, manifest: entry.manifest })) }, null, 2)}\n`,
   )
-  files.set(CHECKLIST_REL, renderChecklistTemplate(loadChecks(), plan.name))
+  const checklistPath = path.join(outDir, CHECKLIST_REL)
+  const previousChecklist = await fs.promises.readFile(checklistPath, 'utf8').catch(() => undefined)
+  const merged = mergeChecklist(previousChecklist, loadChecks(), plan.name)
+  let checklistBackupPath: string | undefined
+  if (previousChecklist !== undefined && merged.preserved.length > 0) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '')
+    checklistBackupPath = `${checklistPath}.bak-${stamp}`
+    await fs.promises.writeFile(checklistBackupPath, previousChecklist, 'utf8')
+  }
+  files.set(CHECKLIST_REL, merged.body)
   files.set(MAPPING_REL, renderMappingTemplate(plan))
 
   for (const [rel, body] of files) {
@@ -313,7 +387,7 @@ export async function materializePlan(
     await fs.promises.writeFile(full, body, 'utf8')
   }
   const all = [...files.keys()].sort()
-  await writeOwnership(outDir, all)
+  await writeOwnership(outDir, all, planSha256)
 
   return {
     ok: true,
@@ -325,5 +399,9 @@ export async function materializePlan(
     files: all,
     waves: waves.result.waves,
     overlaps: waves.result.overlaps,
+    planSha256,
+    checklistPreserved: merged.preserved,
+    ...(checklistBackupPath === undefined ? {} : { checklistBackupPath }),
+    warnings: collectWarnings(plan),
   }
 }

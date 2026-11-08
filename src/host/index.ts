@@ -1,4 +1,4 @@
-﻿// Host entry: runs in the DSH Node process. Bundled to lib/index.js as ESM.
+// Host entry: runs in the DSH Node process. Bundled to lib/index.js as ESM.
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { buildTools } from './tools.js'
@@ -14,7 +14,7 @@ export { renderDraft } from './compose/draft.js'
 export { renderGraphToml, renderModuleSpec, findExposeIndex } from './compose/graph.js'
 export { renderSpecDoc } from './compose/spec-doc.js'
 export { isRunRecord, materializePlan } from './compose/materialize.js'
-export { renderChecklistTemplate, CHECKLIST_REL } from './compose/checklist-template.js'
+export { renderChecklistTemplate, mergeChecklist, CHECKLIST_REL } from './compose/checklist-template.js'
 export { renderMappingTemplate, MAPPING_REL } from './compose/mapping-template.js'
 export { loadChecks, checksFilePath } from './checks.js'
 export { resolveSpecgraphEnv, preflightSpecgraph, findSpecgraphHome } from './specgraph.js'

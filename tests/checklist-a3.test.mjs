@@ -49,3 +49,14 @@ test('A3 still fails a command without exit: marker', async () => {
   assert.equal(out.status, 'FAIL')
   assert.match(out.evidence, /lacks exit: marker/)
 })
+
+test('A3 does not pass the exit: marker to the replayed command', async () => {
+  let argv
+  const out = await checkA3(
+    context(`${header}| A1 | PASS | command: python -m specgraph check . exit:0 |  |`, (value) => {
+      argv = value
+    }),
+  )
+  assert.equal(out.status, 'PASS')
+  assert.deepEqual(argv, ['python', '-m', 'specgraph', 'check', '.'])
+})

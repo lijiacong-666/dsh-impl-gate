@@ -1,7 +1,7 @@
 // The three DSH tools exposed by dsh-impl-gate v1.
 // Only impl_gate_check is real in Step 2; report and verify are registered so
 // the tool surface is stable, and return E_NOT_IMPLEMENTED until Step 4.
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -47,6 +47,8 @@ export interface CheckPayload {
   runId: string
   startedAt: string
   durationMs: number
+  /** Set when compose-plan.json no longer matches ownership.json. */
+  designStale?: string
 }
 
 const MAX_EVIDENCE = 2048
@@ -220,6 +222,26 @@ function notRunReason(item: CheckItem, slow: boolean, implemented: boolean): str
   if (item.runtime === 'slow' && !slow) return 'SLOW_CHECK_DISABLED'
   if (!implemented) return 'NOT_IMPLEMENTED'
   return item.notRunReason
+}
+
+/**
+ * 1.2: design artifacts drift silently. ownership.json records the sha256 of the
+ * plan that produced SPEC.md/checklist; if the plan changed afterwards, say so.
+ */
+function designStaleness(implRoot: string): string | undefined {
+  const planFile = path.join(implRoot, 'compose-plan.json')
+  const ownershipFile = path.join(implRoot, '.impl-gate', 'ownership.json')
+  try {
+    if (!fs.existsSync(planFile) || !fs.existsSync(ownershipFile)) return undefined
+    const record = JSON.parse(fs.readFileSync(ownershipFile, 'utf8')) as { plan_sha256?: unknown }
+    const expected = typeof record.plan_sha256 === 'string' ? record.plan_sha256 : ''
+    if (expected === '') return undefined
+    const actual = createHash('sha256').update(fs.readFileSync(planFile)).digest('hex')
+    if (actual === expected) return undefined
+    return `compose-plan.json changed after the last materialize (plan sha256 ${actual.slice(0, 12)}… vs ${expected.slice(0, 12)}…); SPEC.md / checklist / tasks are stale — run impl_gate_compose mode:"materialize" then impl_gate_init again`
+  } catch {
+    return undefined
+  }
 }
 
 export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckPayload | ToolFailure> {
@@ -402,6 +424,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     return fail('E_INTERNAL_INCONSISTENT', `assertion partition is not a clean split of ${checks.length} ids`)
   }
 
+  const staleDesign = designStaleness(implRoot)
   const payload: CheckPayload = {
     ...base,
     passed,
@@ -409,6 +432,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     notRun,
     evidence,
     durationMs: Date.now() - startedMs,
+    ...(staleDesign === undefined ? {} : { designStale: staleDesign }),
   }
   rememberRun(runId, payload, reasons, graphRoot)
   return payload
@@ -428,6 +452,7 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
   if (payload.graphExitCode !== undefined && payload.graphExitCode !== 0) {
     lines.push(`graphExitCode=${payload.graphExitCode}, ${(payload.graphIssues ?? []).length} issue(s)`)
   }
+  if (payload.designStale !== undefined) lines.push(`stale design: ${payload.designStale}`)
   return [{ type: 'text', text: lines.join('\n') }]
 }
 
@@ -598,6 +623,10 @@ export interface ComposePayload {
   overlaps?: Array<{ a: string; b: string; files: string[] }>
   /** Set when `mode:"plan" + overwrite:true` moved an existing plan aside. */
   backupPath?: string
+  planSha256?: string
+  checklistPreserved?: string[]
+  checklistBackupPath?: string
+  warnings?: Array<{ code: string; count: number; items: string[] }>
 }
 
 /** G8: the verdict scale a reviewer must apply to every module of SPEC.md. */
@@ -662,6 +691,10 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
         files: outcome.files,
         waves: outcome.waves,
         overlaps: outcome.overlaps,
+        planSha256: outcome.planSha256,
+        checklistPreserved: outcome.checklistPreserved,
+        ...(outcome.checklistBackupPath === undefined ? {} : { checklistBackupPath: outcome.checklistBackupPath }),
+        warnings: outcome.warnings,
       }
     }
     const failure: ComposeFailure = {
@@ -823,6 +856,13 @@ function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; te
     if (overlaps.length > 0) {
       lines.push(`overlaps (${overlaps.length}): ${overlaps.map((entry) => `${entry.a}/${entry.b}: ${entry.files.join(', ')}`).join(' | ')}`)
     }
+    if ((payload.checklistPreserved ?? []).length > 0) {
+      const backup = payload.checklistBackupPath === undefined ? '' : `; previous checklist at ${payload.checklistBackupPath}`
+      lines.push(`checklist: preserved ${payload.checklistPreserved?.length ?? 0} filled row(s)${backup}`)
+    }
+    for (const warning of payload.warnings ?? []) {
+      lines.push(`warning ${warning.code} (${warning.count}): ${warning.items.join(', ')}`)
+    }
     return [{ type: 'text', text: lines.join('\n') }]
   }
   const slots = payload.missingSlots ?? []
@@ -934,6 +974,7 @@ const checkOutputSchema = {
     runId: { type: 'string' },
     startedAt: { type: 'string' },
     durationMs: { type: 'number' },
+    designStale: { type: 'string' },
     error: errorSchema,
   },
 }
@@ -1032,6 +1073,22 @@ const composeOutputSchema = {
     manifestPath: { type: 'string' },
     files: { type: 'array', items: { type: 'string' } },
     backupPath: { type: 'string' },
+    planSha256: { type: 'string' },
+    checklistPreserved: { type: 'array', items: { type: 'string' } },
+    checklistBackupPath: { type: 'string' },
+    warnings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          code: { type: 'string' },
+          count: { type: 'number' },
+          items: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['code', 'count', 'items'],
+        additionalProperties: false,
+      },
+    },
     waves: {
       type: 'array',
       items: {

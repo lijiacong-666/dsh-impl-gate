@@ -1,4 +1,4 @@
-﻿# 偏离登记（Deviations）
+# 偏离登记（Deviations）
 
 本文件是偏离的**唯一维护位置**；`TASK-dsh-impl-gate-v1.md` §10 的表与这里内容必须一致，只改一处视为不合格。
 
@@ -25,6 +25,10 @@
 | D-18 | 有 `owner` 的表要求 owner 模块的 `files` 里出现 `migrations/*.sql`，否则 `PLAN_INVALID` | 0.3.0 前迁移归属只写在 playbook，`grep -r migration src/host/compose/*.ts` 为 0 处；盲测显示建表 DDL 无人认领、六个模块各写一份 | 已按实际行为关闭 |
 
 | D-19 | `impl_gate_check` 把每次运行记录写到 `<graphRoot>/.impl-gate/runs/<runId>.json`，磁盘记录保留 24 小时；内存缓存仍是 10 分钟 | 改进清单 2.9：runId 只活 10 分钟、插件热重载即 `E_NO_PRIOR_RUN`；但「验收」本身应在一次实现回合内完成，24 小时只是让 reload 后能复核，不是长期归档 | 已批（0.3.0 自定） |
+
+| D-20 | materialize 重跑不重置 `PASS`/`FAIL` 行，旧 `checklist.md` 先备份为 `.impl-gate/checklist.md.bak-<时间戳>` | 改进清单 1.1：重跑会把已填证据清空、A1 从 PASS 回退 NOT-RUN。选择「保留 + 备份」而不是「重置 + 计数」，因为验收证据是人工/外部进程写入的，工具无权丢弃；代价是改 plan 后保留行可能过期，靠 `stale design` 与人工复核兜底 | 已批（0.3.1 自定） |
+| D-21 | `ownership.json` 记 `plan_sha256`/`generated_at`/真实版本号；`impl_gate_check` 检测不一致时只打 `stale design` 警告，不 FAIL | 改进清单 1.2：版本写死 `@0.2`、无 plan 哈希。只警告是因为「设计改了但还没重跑」属于流程中间态，直接判 FAIL 会让第一次 check 无法用 | 已批（0.3.1 自定） |
+| D-22 | A3 重放时剥掉 `exit:N` 标记（此前会被当作命令参数，导致 `replayed exit 2`） | 改进清单未列，实测发现：`command:python -m specgraph check … exit:0` 重放 argv 多一个 `exit:0`，python 报 `unrecognized arguments` 判 FAIL | 已按实际行为关闭 |
 
 ## 维护规则
 
