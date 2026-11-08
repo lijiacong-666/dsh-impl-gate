@@ -21,7 +21,18 @@ export interface ChecklistMerge {
   preserved: string[]
 }
 
-export function renderChecklistTemplate(items: CheckItem[], name: string): string {
+const SECTION_BY_GROUP: Record<string, string> = { A: '## 3', B: '## 6', M: '## 4', Q: '## 8' }
+
+/** Line (1-based) of the SPEC section a check belongs to; falls back to line 1. */
+export function specLineFor(id: string, specText: string): number {
+  const heading = SECTION_BY_GROUP[id.charAt(0).toUpperCase()]
+  if (heading === undefined) return 1
+  const lines = specText.split(/\r?\n/)
+  const index = lines.findIndex((line) => line.startsWith(heading))
+  return index < 0 ? 1 : index + 1
+}
+
+export function renderChecklistTemplate(items: CheckItem[], name: string, evidence?: (id: string) => string): string {
   const lines: string[] = []
   lines.push('# 验收勾选表')
   lines.push('')
@@ -33,7 +44,7 @@ export function renderChecklistTemplate(items: CheckItem[], name: string): strin
   lines.push('| id | status | evidence | reason |')
   lines.push('|----|--------|----------|--------|')
   for (const item of items) {
-    lines.push(`| ${item.id} | NOT-RUN | file:SPEC.md:1 | NOT_IMPLEMENTED |`)
+    lines.push(`| ${item.id} | NOT-RUN | ${evidence === undefined ? 'file:SPEC.md:1' : evidence(item.id)} | NOT_IMPLEMENTED |`)
   }
   lines.push('')
   lines.push('## 未覆盖')
@@ -50,9 +61,9 @@ export function renderChecklistTemplate(items: CheckItem[], name: string): strin
  * already decided (PASS/FAIL). Unknown or deleted ids are dropped; new ids get
  * the NOT-RUN row from the template.
  */
-export function mergeChecklist(previous: string | undefined, items: CheckItem[], name: string): ChecklistMerge {
+export function mergeChecklist(previous: string | undefined, items: CheckItem[], name: string, evidence?: (id: string) => string): ChecklistMerge {
   if (previous === undefined || previous.trim() === '') {
-    return { body: renderChecklistTemplate(items, name), preserved: [] }
+    return { body: renderChecklistTemplate(items, name, evidence), preserved: [] }
   }
   const parsed = parseChecklist(previous, CHECKLIST_REL)
   const kept = new Map<string, string>()
@@ -80,7 +91,7 @@ export function mergeChecklist(previous: string | undefined, items: CheckItem[],
     if (carried !== undefined) {
       lines.push(carried)
     } else {
-      lines.push(`| ${item.id} | NOT-RUN | file:SPEC.md:1 | NOT_IMPLEMENTED |`)
+      lines.push(`| ${item.id} | NOT-RUN | ${evidence === undefined ? 'file:SPEC.md:1' : evidence(item.id)} | NOT_IMPLEMENTED |`)
       uncovered.push(item.id)
     }
   }

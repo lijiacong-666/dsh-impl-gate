@@ -19,7 +19,7 @@ import { renderGraphToml, renderModuleSpec } from './graph.js'
 import { renderSpecDoc } from './spec-doc.js'
 import { computeWaves, type WavesResult } from '../init/waves.js'
 import { loadChecks } from '../checks.js'
-import { CHECKLIST_REL, mergeChecklist } from './checklist-template.js'
+import { CHECKLIST_REL, mergeChecklist, specLineFor } from './checklist-template.js'
 import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
 import { initTasks } from '../init/init.js'
 
@@ -310,7 +310,8 @@ export async function materializePlan(
   for (const module of plan.modules) {
     files.set(`${plan.name}/${module.dir}/spec.md`, renderModuleSpec(plan, module))
   }
-  files.set('SPEC.md', renderSpecDoc({ plan, waves: waves.result }))
+  const specText = renderSpecDoc({ plan, waves: waves.result })
+  files.set('SPEC.md', specText)
 
   const generated = [...files.keys()]
   for (const [rel, body] of files) {
@@ -373,7 +374,7 @@ export async function materializePlan(
   )
   const checklistPath = path.join(outDir, CHECKLIST_REL)
   const previousChecklist = await fs.promises.readFile(checklistPath, 'utf8').catch(() => undefined)
-  const merged = mergeChecklist(previousChecklist, loadChecks(), plan.name)
+  const merged = mergeChecklist(previousChecklist, loadChecks(), plan.name, (id) => `file:SPEC.md:${specLineFor(id, specText)}`)
   let checklistBackupPath: string | undefined
   if (previousChecklist !== undefined && merged.preserved.length > 0) {
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '')
