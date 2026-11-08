@@ -113,7 +113,7 @@ dsh plugin --profile headless add dsh-impl-gate
 | `impl_gate_check` | `graphRoot`（必填）、`implRoot`、`checklistPath`、`slow` | 跑一次；`checklistPath` 缺省 `<implRoot>/.impl-gate/checklist.md` |
 | `impl_gate_report` | `root`（必填）、`runId` | 读缓存汇总；无 `runId` 时取该根最近一次运行 |
 | `impl_gate_verify_contract` | `root`（必填）、`runId` | 只复核 A1–A5，不重跑其他断言 |
-| `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`（plan 已存在则 `E_PLAN_EXISTS`，不会覆盖）；`draft` 只按现有 plan 刷新 `SPEC-DRAFT.md`，从不写 plan；`materialize` 生成图谱、`SPEC.md` 与 `export/` |
+| `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`（plan 已存在则 `E_PLAN_EXISTS`，不会覆盖）；`draft` 只按现有 plan 刷新 `SPEC-DRAFT.md`，从不写 plan；`materialize` 生成图谱、`SPEC.md`、`export/`、`.impl-gate/checklist.md` 与 `.impl-gate/mapping.md` |
 | `impl_gate_init` | `outDir`（必填）、`implRoot`、`overwrite` | 按波次生成 `<outDir>/tasks/`：`TASKS.md`、`cards.json`、`wave-<n>/<id>-<dir>.md`；不改图谱、`SPEC.md`、`export/` |
 
 ### `impl_gate_compose` 的输出结构
@@ -271,5 +271,6 @@ pnpm verify        # typecheck → build lib/ → node --test → 包内容检�
 ## 许可证
 
 [Apache License 2.0](LICENSE)
+
 
 

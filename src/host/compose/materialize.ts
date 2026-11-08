@@ -1,4 +1,4 @@
-// `mode: "materialize"`: compose-plan.json -> spec-graph root + nine-section
+﻿// `mode: "materialize"`: compose-plan.json -> spec-graph root + nine-section
 // SPEC.md + export/ instruction package. Every judgement about the graph comes
 // from `python -m specgraph check|export`; nothing here re-implements it.
 
@@ -58,6 +58,14 @@ const OWNERSHIP = '.impl-gate/ownership.json'
 
 function toPosix(file: string): string {
   return file.split(path.sep).join('/')
+}
+
+// `impl_gate_check` writes <graphRoot>/.impl-gate/runs/run-*.json. Those are
+// tool output, so a later materialize must not treat them as foreign files.
+const RUN_RECORD_RE = /(^|\/)\.impl-gate\/runs\/run-[a-z0-9]+-[a-z0-9]+\.json$/
+
+export function isRunRecord(file: string): boolean {
+  return RUN_RECORD_RE.test(file)
 }
 
 async function listFiles(root: string): Promise<string[]> {
@@ -215,7 +223,7 @@ export async function materializePlan(
   if (await fs.promises.stat(specFile).then((stat) => stat.isFile()).catch(() => false)) {
     existing.push('SPEC.md')
   }
-  const conflicts = existing.filter((file) => !registered.has(file)).sort()
+  const conflicts = existing.filter((file) => !registered.has(file) && !isRunRecord(file)).sort()
   if (conflicts.length > 0) {
     return failure(
       'EXPORT_REFUSED',

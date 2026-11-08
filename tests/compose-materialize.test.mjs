@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -8,6 +8,7 @@ import {
   computeWaves,
   materializePlan,
   missingSlots,
+  isRunRecord,
   stripMeta,
   validatePlan,
   renderSpecDoc,
@@ -322,4 +323,12 @@ test('non-JSON export failure is PYTHON_ENV_MISSING', { skip: !winOnly && 'fake 
     fs.rmSync(fakeDir, { recursive: true, force: true })
     fs.rmSync(out, { recursive: true, force: true })
   }
+})
+
+
+test('run records written by check do not block a second materialize', () => {
+  assert.equal(isRunRecord('demo/.impl-gate/runs/run-mw7s6e2g-6d146dd8.json'), true)
+  assert.equal(isRunRecord('.impl-gate/runs/run-mw7s6e2g-6d146dd8.json'), true)
+  assert.equal(isRunRecord('demo/.impl-gate/runs/notes.md'), false)
+  assert.equal(isRunRecord('demo/.impl-gate/checklist.md'), false)
 })
