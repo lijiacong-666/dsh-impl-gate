@@ -122,7 +122,9 @@ dsh plugin --profile headless add dsh-impl-gate
 <outDir>/
 ├── compose-plan.json
 ├── SPEC.md                    ← 与 graphRoot 同级，不放进图里
-├── .impl-gate/ownership.json
+├── .impl-gate/
+│   ├── checklist.md           ← 32 行骨架，materialize 生成
+│   └── ownership.json
 ├── export/
 │   ├── export.md
 │   └── manifest.json
@@ -136,6 +138,8 @@ dsh plugin --profile headless add dsh-impl-gate
 **填 plan 的安全循环**：`mode:"plan"` 只在目录为空时生成模板；第二次调用会返回 `E_PLAN_EXISTS` 而不是覆盖。要边写边看草稿，用 `mode:"draft"`——它按现有 plan 重写 `SPEC-DRAFT.md`，从不写 plan。确实要从头再来时才用 `plan` + `overwrite:true`，旧的 plan 会先备份成 `compose-plan.backup-<YYYYMMDDTHHMMSS>.json`。
 
 **迁移文件归属**：每张有 `owner` 的表，其 owner 模块的 `files` 里必须出现一个 `migrations/*.sql`（如 `user-service/migrations/001_users.sql`），否则 `validatePlan` 报 `/data/<i>/owner: owner module "M2" of table "users" has no migration file`。这保证建表 DDL 有唯一归属，不会被六个模块各写一份。
+
+**验收表骨架**：materialize 会按 `checks/impl-gate.checks.json` 写 `.impl-gate/checklist.md`——32 行、全是 `NOT-RUN / NOT_IMPLEMENTED`、evidence 指向 `SPEC.md:1`，并带 `## 未覆盖` 段。用 `impl_gate_check` 配 `implRoot=<outDir>` 跑一次，设计阶段能判的 A1–A5、B2、B7、Q10 会直接给出结论（实测 `PASS 8 / FAIL 0 / NOT-RUN 24`）；其余行等实现证据。
 
 ### 配置
 
