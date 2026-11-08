@@ -21,6 +21,7 @@ import { computeWaves, type WavesResult } from '../init/waves.js'
 import { loadChecks } from '../checks.js'
 import { CHECKLIST_REL, mergeChecklist } from './checklist-template.js'
 import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
+import { initTasks } from '../init/init.js'
 
 export interface ComposeWarning {
   code: 'COVERAGE_GAP' | 'ERROR_OWNER_MISSING' | 'AUTH_UNSPECIFIED'
@@ -52,6 +53,8 @@ export interface MaterializePayload {
   /** Rows carried over from the previous checklist because they were PASS/FAIL. */
   checklistPreserved: string[]
   checklistBackupPath?: string
+  /** Card files re-rendered because tasks/ already existed. */
+  tasksRefreshed?: string[]
   warnings: ComposeWarning[]
 }
 
@@ -389,6 +392,18 @@ export async function materializePlan(
   const all = [...files.keys()].sort()
   await writeOwnership(outDir, all, planSha256)
 
+  // Cards are derived from the same plan: if the project already shipped them,
+  // refresh them here instead of leaving a stale tasks/ tree behind.
+  let tasksRefreshed: string[] = []
+  if (fs.existsSync(path.join(outDir, 'tasks'))) {
+    try {
+      const refreshed = initTasks(outDir, { overwrite: true })
+      if ('ok' in refreshed && refreshed.ok) tasksRefreshed = refreshed.filesWritten ?? []
+    } catch {
+      tasksRefreshed = []
+    }
+  }
+
   return {
     ok: true,
     mode: 'materialize',
@@ -402,6 +417,7 @@ export async function materializePlan(
     planSha256,
     checklistPreserved: merged.preserved,
     ...(checklistBackupPath === undefined ? {} : { checklistBackupPath }),
+    ...(tasksRefreshed.length === 0 ? {} : { tasksRefreshed }),
     warnings: collectWarnings(plan),
   }
 }

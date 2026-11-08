@@ -626,6 +626,7 @@ export interface ComposePayload {
   planSha256?: string
   checklistPreserved?: string[]
   checklistBackupPath?: string
+  tasksRefreshed?: string[]
   warnings?: Array<{ code: string; count: number; items: string[] }>
 }
 
@@ -694,6 +695,7 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
         planSha256: outcome.planSha256,
         checklistPreserved: outcome.checklistPreserved,
         ...(outcome.checklistBackupPath === undefined ? {} : { checklistBackupPath: outcome.checklistBackupPath }),
+        ...(outcome.tasksRefreshed === undefined ? {} : { tasksRefreshed: outcome.tasksRefreshed }),
         warnings: outcome.warnings,
       }
     }
@@ -855,6 +857,9 @@ function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; te
     ]
     if (overlaps.length > 0) {
       lines.push(`overlaps (${overlaps.length}): ${overlaps.map((entry) => `${entry.a}/${entry.b}: ${entry.files.join(', ')}`).join(' | ')}`)
+    }
+    if ((payload.tasksRefreshed ?? []).length > 0) {
+      lines.push(`tasks: refreshed ${payload.tasksRefreshed?.length ?? 0} card file(s) from the same plan`)
     }
     if ((payload.checklistPreserved ?? []).length > 0) {
       const backup = payload.checklistBackupPath === undefined ? '' : `; previous checklist at ${payload.checklistBackupPath}`
@@ -1076,6 +1081,7 @@ const composeOutputSchema = {
     planSha256: { type: 'string' },
     checklistPreserved: { type: 'array', items: { type: 'string' } },
     checklistBackupPath: { type: 'string' },
+    tasksRefreshed: { type: 'array', items: { type: 'string' } },
     warnings: {
       type: 'array',
       items: {
