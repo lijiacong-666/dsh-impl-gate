@@ -57,7 +57,11 @@ export function renderSpecDoc(input: SpecDocInput): string {
   const lines: string[] = [`# ${plan.title}`, '', `> ${plan.summary}`, '']
 
   // 1
-  lines.push('## 1 目标与非目标', '', '### 目标', ...listOrNone(plan.goals), '', '### 非目标', ...listOrNone(plan.nonGoals), '')
+  const goalLines =
+    plan.goals.length === 0
+      ? ['（无）']
+      : plan.goals.map((goal, index) => `- **G${index + 1}** ${goal}`)
+  lines.push('## 1 目标与非目标', '', '### 目标', ...goalLines, '', '### 非目标', ...listOrNone(plan.nonGoals), '')
 
   // 2
   lines.push('## 2 系统边界', '')
@@ -145,8 +149,14 @@ export function renderSpecDoc(input: SpecDocInput): string {
     lines.push('（无）', '')
   } else {
     lines.push(...table(
-      ['码', '状态码', '触发条件', '响应体'],
-      errors.map((error) => [error.code, String(error.status), error.when, error.shape ?? plan.globals.errorShape ?? '—']),
+      ['码', '状态码', '归属模块', '触发条件', '响应体'],
+      errors.map((error) => [
+        error.code,
+        String(error.status),
+        error.by ?? '（未指定）',
+        error.when,
+        error.shape ?? plan.globals.errorShape ?? '—',
+      ]),
     ), '')
   }
 
@@ -156,8 +166,15 @@ export function renderSpecDoc(input: SpecDocInput): string {
     lines.push('（无）', '')
   } else {
     lines.push(...table(
-      ['方法', '路径', '处理模块', '请求', '响应'],
-      http.map((route) => [route.method, route.path, route.module, route.req ?? '（无）', route.res]),
+      ['方法', '路径', '处理模块', '鉴权', '请求', '响应'],
+      http.map((route) => [
+        route.method,
+        route.path,
+        route.module,
+        route.auth ?? 'public',
+        route.req ?? '（无）',
+        route.res.trim() === 'void' ? '204（无响应体）' : route.res,
+      ]),
     ), '')
   }
 
@@ -188,6 +205,17 @@ export function renderSpecDoc(input: SpecDocInput): string {
     })
   }
   lines.push(...table(['编号', '模块', '断言', '证据', '覆盖目标'], acceptance), '')
+  const covered = new Set<number>()
+  for (const module of plan.modules) {
+    for (const item of module.acceptance) {
+      const match = item.covers === undefined ? null : /^G([1-9][0-9]*)$/.exec(item.covers)
+      if (match !== null) covered.add(Number(match[1]))
+    }
+  }
+  const uncovered = plan.goals.map((_, index) => index + 1).filter((goal) => !covered.has(goal))
+  if (plan.goals.length > 0 && uncovered.length > 0) {
+    lines.push(`覆盖缺口：${uncovered.map((goal) => `G${goal}`).join('、')} 没有验收断言对应的 \`covers\`，开工会上需补。`, '')
+  }
 
   // 7
   lines.push('## 7 实施波次', '')

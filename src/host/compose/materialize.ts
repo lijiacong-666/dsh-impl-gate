@@ -19,6 +19,7 @@ import { renderSpecDoc } from './spec-doc.js'
 import { computeWaves, type WavesResult } from '../init/waves.js'
 import { loadChecks } from '../checks.js'
 import { CHECKLIST_REL, renderChecklistTemplate } from './checklist-template.js'
+import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
 
 export interface MaterializeConfig {
   specgraphCommand: string
@@ -295,6 +296,7 @@ export async function materializePlan(
     `${JSON.stringify({ schemaVersion: 1, modules: exports.map((entry) => ({ dir: entry.dir, manifest: entry.manifest })) }, null, 2)}\n`,
   )
   files.set(CHECKLIST_REL, renderChecklistTemplate(loadChecks(), plan.name))
+  files.set(MAPPING_REL, renderMappingTemplate(plan))
 
   for (const [rel, body] of files) {
     if (generated.includes(rel)) continue

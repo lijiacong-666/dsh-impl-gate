@@ -1,4 +1,4 @@
-# 偏离登记（Deviations）
+﻿# 偏离登记（Deviations）
 
 本文件是偏离的**唯一维护位置**；`TASK-dsh-impl-gate-v1.md` §10 的表与这里内容必须一致，只改一处视为不合格。
 
@@ -24,8 +24,11 @@
 | D-17 | `impl_gate_compose` 的 `plan` 模式不再覆盖已有 `compose-plan.json`：未传 `overwrite:true` 返回 `E_PLAN_EXISTS`；新增 `mode:"draft"` 只刷新 `SPEC-DRAFT.md`；`overwrite:true` 先写 `compose-plan.backup-<时间戳>.json` | 0.3.0 前 `plan` 会直写空模板，配合 playbook「plan 已存在也能调 plan」的旧写法，实际等于删掉用户已填的设计（改进清单 1.1，`tools.ts:619/635`） | 已按实际行为关闭 |
 | D-18 | 有 `owner` 的表要求 owner 模块的 `files` 里出现 `migrations/*.sql`，否则 `PLAN_INVALID` | 0.3.0 前迁移归属只写在 playbook，`grep -r migration src/host/compose/*.ts` 为 0 处；盲测显示建表 DDL 无人认领、六个模块各写一份 | 已按实际行为关闭 |
 
+| D-19 | `impl_gate_check` 把每次运行记录写到 `<graphRoot>/.impl-gate/runs/<runId>.json`，磁盘记录保留 24 小时；内存缓存仍是 10 分钟 | 改进清单 2.9：runId 只活 10 分钟、插件热重载即 `E_NO_PRIOR_RUN`；但「验收」本身应在一次实现回合内完成，24 小时只是让 reload 后能复核，不是长期归档 | 已批（0.3.0 自定） |
+
 ## 维护规则
 
 1. 新增偏离：在本表加一行，同时在任务书 §10 加同一行；两处必须同步。
 2. 只记录**已生效**的决定；尚未落地的想法写在任务书正文，不进本表。
 3. 每条偏离都要写清「与什么不一致」和「为什么」，裁决列写「已批」或「待处置」。
+

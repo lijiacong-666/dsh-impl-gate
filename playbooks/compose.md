@@ -101,8 +101,8 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `globals` | 全局约定/禁止/envKeys，可给统一 `errorShape` | `envKeys:["DATABASE_URL"]` | 省略 envKeys |
 | `data` | 表、字段、建表模块与运行时写入方，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
 | `types` | 契约里用到的类型定义（可选） | `{name:"User",kind:"object",fields:[…]}` | 只写类型名不写字段 |
-| `errors` | 错误码目录（可选，但被引用就必须声明） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误",shape:"{\"error\":{\"code\",\"message\"}}"}` | 只写 `E_` 前缀 |
-| `http` | 对外路由（可选） | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair"}` | 路径不写 `/` |
+| `errors` | 错误码目录（可选，但被引用就必须声明）；建议每条写 `by`（哪个模块抛出它） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误",shape:"{\"error\":{\"code\",\"message\"}}",by:"M1"}` | 只写 `E_` 前缀 |
+| `http` | 对外路由（可选）；`auth` 写明 `public`/`session`/`admin`，无响应体写 `res:"void"` | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair",auth:"public"}` | 路径不写 `/` |
 | `openQuestions` | 自己拿不准、需要人裁决的点 | `["token 是否要支持刷新"]` | 用注释代替 |
 | `modules` | 模块数组，至少 1 个 | 见下 | 没有模块 |
 | `deliverables` | 交付树与文件清单 | `{tree:"...",files:[{path,purpose}]}` | 只写 tree |
@@ -179,11 +179,15 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 ```json
 "http": [
   { "method": "POST", "path": "/auth/login", "module": "M3", "handler": "login",
-    "req": "LoginInput", "res": "TokenPair" },
+    "req": "LoginInput", "res": "TokenPair", "auth": "public" },
   { "method": "GET", "path": "/users/:id", "module": "M2", "handler": "getUser",
-    "res": "Member" }
+    "res": "Member", "auth": "session" },
+  { "method": "DELETE", "path": "/users/:id", "module": "M2", "handler": "removeUser",
+    "res": "void", "auth": "admin" }
 ]
 ```
+
+`auth` 三选一：`public`（免鉴权）、`session`（登录用户）、`admin`（管理员）；不写按 `public` 渲染。`res:"void"` 表示 204 无响应体，4.4 会打印成「204（无响应体）」——DELETE/PUT 这类别再写一个不存在的返回类型。错误码那边建议每条写 `by`（抛出它的模块 id），4.3 会打印「归属模块」列；写错模块 id 会报 `/errors/<i>/by: module "M9" does not exist`。
 
 规则：`module` 必须存在且该模块有 `kind:"http"` 的 expose；`handler` 必须等于该签名开头的标识符；`req`/`res` 必须是 `types` 里声明过的类型；同一 `method+path` 只能出现一次。**验收断言里写到的路由也必须先在这里声明**：`acceptance[].assertion` 里出现 `GET /bookmarks/:id`，`http[]` 就要有同 `method+path` 的条目，否则报 `acceptance references undeclared route "GET /bookmarks/:id" at /modules/<i>/acceptance/<j>（已声明：…）`。断言里的 query string（`GET /bookmarks?scope=team`）、句尾标点（`GET /bookmarks,`）和包裹引号（`GET “/bookmarks”`）不参与路由比对；但 `:param` 名称不同仍算不同路由，不会模糊匹配。
 

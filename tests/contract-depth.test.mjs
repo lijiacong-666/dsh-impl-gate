@@ -40,7 +40,7 @@ function basePlan() {
       { name: 'Pool', kind: 'external', source: 'pg' },
     ],
     errors: [
-      { code: 'E_AUTH_INVALID', status: 401, when: '账号或密码错误', shape: '{"error":{"code","message"}}' },
+      { code: 'E_AUTH_INVALID', status: 401, when: '账号或密码错误', shape: '{"error":{"code","message"}}', by: 'M1' },
     ],
     http: [{ method: 'POST', path: '/login', module: 'M1', handler: 'login', req: 'LoginInput', res: 'TokenPair' }],
     modules: [
@@ -196,9 +196,9 @@ test('SPEC 4.2/4.3/4.4 render types, errors and the http surface', () => {
   assert.match(doc, /#### Role（enum）\n\n取值：`admin`、`member`/)
   assert.match(doc, /#### Pool（external）\n\n来源：pg/)
   assert.match(doc, /### 4\.3 错误码/)
-  assert.match(doc, /\| E_AUTH_INVALID \| 401 \| 账号或密码错误 \|/)
+  assert.match(doc, /\| E_AUTH_INVALID \| 401 \| M1 \| 账号或密码错误 \|/)
   assert.match(doc, /### 4\.4 接口面/)
-  assert.match(doc, /\| POST \| \/login \| M1 \| LoginInput \| TokenPair \|/)
+  assert.match(doc, /\| POST \| \/login \| M1 \| public \| LoginInput \| TokenPair \|/)
 })
 
 test('SPEC 4.2/4.3/4.4 say （无） when the plan declares nothing', () => {

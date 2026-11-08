@@ -261,7 +261,7 @@ test('4.3 keeps a per-error shape that overrides globals.errorShape', () => {
   plan.globals.errorShape = '{"error":{"code","message"}}'
   plan.errors.push({ code: 'E_DB_DOWN', status: 500, when: '数据库不可用', shape: '{"error":{"code","message","detail"}}' })
   const section = render(plan).split('### 4.3 错误码')[1].split('### 4.4 接口面')[0]
-  assert.match(section, /E_DB_DOWN \| 500 \| 数据库不可用 \| \{"error":\{"code","message","detail"\}\}/)
+  assert.match(section, /E_DB_DOWN \| 500 \| （未指定） \| 数据库不可用 \| \{"error":\{"code","message","detail"\}\}/)
 })
 
 test('4.1 names the writers when a referencing module does not write the table', () => {

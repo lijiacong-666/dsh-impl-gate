@@ -15,6 +15,7 @@ export { renderGraphToml, renderModuleSpec, findExposeIndex } from './compose/gr
 export { renderSpecDoc } from './compose/spec-doc.js'
 export { materializePlan } from './compose/materialize.js'
 export { renderChecklistTemplate, CHECKLIST_REL } from './compose/checklist-template.js'
+export { renderMappingTemplate, MAPPING_REL } from './compose/mapping-template.js'
 export { loadChecks, checksFilePath } from './checks.js'
 export { resolveSpecgraphEnv, preflightSpecgraph, findSpecgraphHome } from './specgraph.js'
 export { computeWaves } from './init/waves.js'

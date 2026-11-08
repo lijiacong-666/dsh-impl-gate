@@ -1,4 +1,4 @@
-<!-- 写作规范见 playbooks/reference/readme.md；与 README.en.md 保持相同章节。 -->
+﻿<!-- 写作规范见 playbooks/reference/readme.md；与 README.en.md 保持相同章节。 -->
 
 # Impl Gate
 
@@ -139,6 +139,10 @@ dsh plugin --profile headless add dsh-impl-gate
 
 **迁移文件归属**：每张有 `owner` 的表，其 owner 模块的 `files` 里必须出现一个 `migrations/*.sql`（如 `user-service/migrations/001_users.sql`），否则 `validatePlan` 报 `/data/<i>/owner: owner module "M2" of table "users" has no migration file`。这保证建表 DDL 有唯一归属，不会被六个模块各写一份。
 
+**目标编号与覆盖缺口**：`SPEC.md` 第 1 节把每个目标渲染成 `G1…`，模块验收条目用 `acceptance[].covers:"G3"` 指回来；有 goal 没被任何 AC 覆盖时，第 6 节表格下方会打印「覆盖缺口：G3 没有验收断言对应的 `covers`」，方便开工会上补。
+
+**契约字段（0.3.0）**：`http[].auth` 三选一 `public|session|admin`（缺省按 `public` 渲染）、`res:"void"` 渲染成「204（无响应体）」；`errors[].by` 写抛出模块 id，4.3 打印「归属模块」列，模块不存在会报 `/errors/<i>/by: module "M9" does not exist`。
+
 **验收表骨架**：materialize 会按 `checks/impl-gate.checks.json` 写 `.impl-gate/checklist.md`——32 行、全是 `NOT-RUN / NOT_IMPLEMENTED`、evidence 指向 `SPEC.md:1`，并带 `## 未覆盖` 段。用 `impl_gate_check` 配 `implRoot=<outDir>` 跑一次，设计阶段能判的 A1–A5、B2、B7、Q10 会直接给出结论（实测 `PASS 8 / FAIL 0 / NOT-RUN 24`）；其余行等实现证据。
 
 ### 配置
@@ -167,8 +171,8 @@ dsh plugin --profile headless add dsh-impl-gate
 | `E_SPAWN_DENIED` | 无权限启动子进程（EPERM / EACCES） |
 | `E_TIMEOUT` | 超过 `timeoutMs`，进程已杀 |
 | `E_BAD_JSON` | specgraph 输出不是合法 JSON |
-| `E_NO_PRIOR_RUN` | 无缓存：没跑过、跨了根目录，或插件热重载清空了缓存 |
-| `E_RUN_EXPIRED` | 缓存超过 10 分钟 |
+| `E_NO_PRIOR_RUN` | 无缓存：没跑过、跨了根目录，且 `<graphRoot>/.impl-gate/runs/` 里也没有这个 runId |
+| `E_RUN_EXPIRED` | 内存缓存超过 10 分钟，磁盘上也没有可用的记录 |
 | `E_INTERNAL_INCONSISTENT` | 32 条分区不干净，或未覆盖集合与 NOT-RUN 不一致 |
 | `PYTHON_ENV_MISSING` | 解释器导入不了 specgraph（compose 写盘前 preflight 失败；check/export 返回非 JSON 失败） |
 | `PLAN_HAS_CYCLE` | `impl_gate_init`：plan 的模块依赖成环；由 `validatePlan` 的环检测转出，`code` 是原因串而非 §5 错误码，message 带 `A → B → A` |
@@ -199,7 +203,7 @@ dsh plugin --profile headless add dsh-impl-gate
 
 ## 边界
 
-- 缓存只在本进程内存里，按 `runId` + 规范化根目录存，TTL 10 分钟；插件热重载会清空，此时 `E_NO_PRIOR_RUN` 属正常，重跑一次 `impl_gate_check` 即可。
+- 运行记录按 `runId` + 规范化根目录存两处：内存 10 分钟，`<graphRoot>/.impl-gate/runs/<runId>.json` 保留 24 小时；插件热重载后 report / verify_contract 仍能按 runId 或「该根最近一次」读回。
 - `allowCommandReplay` 默认关闭，M/Q 共 15 条默认 `EXEC_DISABLED`；打开后也只跑前 5 条，其余标 `EXEC_DISABLED`（证据里 `skipped=replay_budget_exhausted`）。
 - B3 / B4 / B6 恒 NOT-RUN（D-10）；B1 / B2 / B5 / B7 用的是可机械判定的代理口径（D-11），见下面「人工核对项」。
 - Q4 不联网；M7 / M10 不做 GUI 自动判定。
@@ -267,3 +271,5 @@ pnpm verify        # typecheck → build lib/ → node --test → 包内容检�
 ## 许可证
 
 [Apache License 2.0](LICENSE)
+
+

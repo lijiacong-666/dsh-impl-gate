@@ -51,6 +51,8 @@ export interface CheckPayload {
 
 const MAX_EVIDENCE = 2048
 const RUN_TTL_MS = 10 * 60 * 1000
+/** Runs on disk survive an extension reload, so they get a longer lease. */
+const RUN_FILE_TTL_MS = 24 * 60 * 60 * 1000
 
 const errorSchema = {
   type: 'object',
@@ -79,15 +81,69 @@ export function normalizeRoot(root: string): string {
   return process.platform === 'win32' ? unquoted.toLowerCase() : unquoted
 }
 
+function runsDir(graphRoot: string): string {
+  return path.join(graphRoot, '.impl-gate', 'runs')
+}
+
+/** Best effort: a read-only root must not turn a successful check into a failure. */
+function persistRun(runId: string, record: RunRecord): void {
+  try {
+    const dir = runsDir(record.graphRoot)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, `${runId}.json`), JSON.stringify({ runId, ...record }), 'utf8')
+  } catch {
+    // ignore: the in-memory record still serves this process
+  }
+}
+
+function readRunFile(root: string, runId: string): RunRecord | null {
+  if (!/^run-[a-z0-9]+-[a-z0-9]+$/.test(runId)) return null
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(runsDir(root), `${runId}.json`), 'utf8')) as
+      | (RunRecord & { runId?: string })
+      | null
+    if (raw === null || typeof raw.finishedAt !== 'number') return null
+    if (Date.now() - raw.finishedAt > RUN_FILE_TTL_MS) return null
+    return { payload: raw.payload, reasons: raw.reasons, graphRoot: raw.graphRoot, finishedAt: raw.finishedAt }
+  } catch {
+    return null
+  }
+}
+
+function readLatestRunFile(root: string): RunRecord | null {
+  let entries: string[]
+  try {
+    entries = fs.readdirSync(runsDir(root)).filter((name) => name.endsWith('.json'))
+  } catch {
+    return null
+  }
+  let best: RunRecord | null = null
+  const wanted = normalizeRoot(root)
+  for (const name of entries) {
+    const record = readRunFile(root, name.slice(0, -'.json'.length))
+    if (record === null) continue
+    if (record.graphRoot !== wanted) continue
+    if (best === null || record.finishedAt > best.finishedAt) best = record
+  }
+  return best
+}
+
 export function rememberRun(
   runId: string,
   payload: CheckPayload,
   reasons: Record<string, string>,
   graphRoot: string,
 ): void {
-  runs.set(runId, { payload, reasons, graphRoot: normalizeRoot(graphRoot), finishedAt: Date.now() })
-  for (const [key, record] of runs) {
-    if (Date.now() - record.finishedAt > RUN_TTL_MS) runs.delete(key)
+  const record: RunRecord = {
+    payload,
+    reasons,
+    graphRoot: normalizeRoot(graphRoot),
+    finishedAt: Date.now(),
+  }
+  runs.set(runId, record)
+  persistRun(runId, record)
+  for (const [key, entry] of runs) {
+    if (Date.now() - entry.finishedAt > RUN_TTL_MS) runs.delete(key)
   }
 }
 
@@ -96,12 +152,18 @@ type LookupResult =
   | { kind: 'missing' }
   | { kind: 'expired' }
 
-function lookupRun(runId: string): LookupResult {
+function lookupRun(runId: string, root?: string): LookupResult {
   const record = runs.get(runId)
-  if (record === undefined) return { kind: 'missing' }
+  if (record === undefined) {
+    const fromDisk = root === undefined ? null : readRunFile(root, runId)
+    if (fromDisk === null) return { kind: 'missing' }
+    return { kind: 'ok', record: fromDisk }
+  }
   if (Date.now() - record.finishedAt > RUN_TTL_MS) {
     runs.delete(runId)
-    return { kind: 'expired' }
+    const fromDisk = root === undefined ? null : readRunFile(root, runId)
+    if (fromDisk === null) return { kind: 'expired' }
+    return { kind: 'ok', record: fromDisk }
   }
   return { kind: 'ok', record }
 }
@@ -122,12 +184,15 @@ function latestRunFor(root: string): LookupResult {
       bestId = runId
     }
   }
-  if (best === undefined) return { kind: 'missing' }
+  if (best === undefined) {
+    const fromDisk = readLatestRunFile(root)
+    return fromDisk === null ? { kind: 'missing' } : { kind: 'ok', record: fromDisk }
+  }
   return { kind: 'ok', record: { ...best, payload: { ...best.payload, runId: best.payload.runId || bestId } } }
 }
 
-export function getRun(runId: string): RunRecord | null {
-  const result = lookupRun(runId)
+export function getRun(runId: string, root?: string): RunRecord | null {
+  const result = lookupRun(runId, root)
   return result.kind === 'ok' ? result.record : null
 }
 
@@ -383,9 +448,9 @@ function selectRun(rawRoot: unknown, rawRunId: unknown): { record: RunRecord } |
   const root = path.resolve(rootArg)
   const runId = typeof rawRunId === 'string' && rawRunId.length > 0 ? rawRunId : ''
   if (runId.length > 0) {
-    const found = lookupRun(runId)
+    const found = lookupRun(runId, root)
     if (found.kind === 'missing') {
-      return fail('E_NO_PRIOR_RUN', `no cached run for runId ${runId}`, 'Run impl_gate_check first; the cache is in-memory and is lost on plugin reload.')
+      return fail('E_NO_PRIOR_RUN', `no cached run for runId ${runId}`, 'Run impl_gate_check first; runs are cached in memory for 10 minutes and under <graphRoot>/.impl-gate/runs for a day.')
     }
     if (found.kind === 'expired') {
       return fail('E_RUN_EXPIRED', `run ${runId} is older than the 10 minute TTL`, 'Run impl_gate_check again.')

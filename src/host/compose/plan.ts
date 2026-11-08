@@ -30,6 +30,8 @@ export interface PlanError {
   when: string
   /** Response body shape; may be omitted only when `globals.errorShape` supplies it. */
   shape?: string
+  /** Module id that constructs and throws this error (0.3.0: 归属). */
+  by?: string
 }
 
 export interface PlanHttp {
@@ -38,7 +40,10 @@ export interface PlanHttp {
   module: string
   handler: string
   req?: string
+  /** `void` means 204 with no body. */
   res: string
+  /** Who may call it: public / session / admin. Absent renders as public. */
+  auth?: 'public' | 'session' | 'admin'
 }
 
 export interface Plan {
@@ -135,8 +140,9 @@ const FILE_KEYS = new Set(['path', 'purpose'])
 const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
 const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note'])
 const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
-const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape'])
-const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res'])
+const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape', 'by'])
+const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth'])
+const AUTH_MODES = new Set(['public', 'session', 'admin'])
 
 const TYPE_KINDS = new Set(['object', 'enum', 'union', 'external'])
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
@@ -572,12 +578,22 @@ function validateTypes(raw: unknown, problems: PlanProblem[]): string[] {
 }
 
 /** Declared error catalog; returns the codes. `defaultShape` comes from globals.errorShape. */
-function validateErrors(raw: unknown, problems: PlanProblem[], defaultShape: string | undefined): string[] {
+function validateErrors(
+  raw: unknown,
+  modulesRaw: unknown,
+  problems: PlanProblem[],
+  defaultShape: string | undefined,
+): string[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) {
     problem(problems, '/errors', 'must be an array')
     return []
   }
+  const moduleIds = new Set(
+    (Array.isArray(modulesRaw) ? modulesRaw : [])
+      .map((candidate) => (isRecord(candidate) && typeof candidate.id === 'string' ? candidate.id : ''))
+      .filter((id) => id.length > 0),
+  )
   const codes: string[] = []
   const seen = new Set<string>()
   raw.forEach((entry, index) => {
@@ -606,6 +622,13 @@ function validateErrors(raw: unknown, problems: PlanProblem[], defaultShape: str
       // D-15: one catalog-level default may replace per-code bodies, but the
       // rendered SPEC must never contain a bare "—" in 4.3.
       problem(problems, pointer(at, 'shape'), 'must be a non-empty string')
+    }
+    if (entry.by !== undefined) {
+      const by = readString(entry.by, pointer(at, 'by'), problems)
+      if (by.length > 0) {
+        if (!MODULE_ID_RE.test(by)) problem(problems, pointer(at, 'by'), 'must look like "M1"')
+        else if (!moduleIds.has(by)) problem(problems, pointer(at, 'by'), `module "${by}" does not exist`)
+      }
     }
   })
   return codes
@@ -637,6 +660,11 @@ function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>,
     }
     const moduleId = readString(entry.module, pointer(at, 'module'), problems)
     const handler = readString(entry.handler, pointer(at, 'handler'), problems)
+    if (entry.auth !== undefined) {
+      if (typeof entry.auth !== 'string' || !AUTH_MODES.has(entry.auth)) {
+        problem(problems, pointer(at, 'auth'), 'must be one of public, session, admin')
+      }
+    }
     if (moduleId.length > 0) {
       const target = moduleList.find(
         (candidate): candidate is Json => isRecord(candidate) && candidate.id === moduleId,
@@ -1169,7 +1197,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
   validateModules(raw.modules, problems, goals.length)
 
   const typeNames = validateTypes(raw.types, problems)
-  const errorCodes = validateErrors(raw.errors, problems, defaultErrorShape)
+  const errorCodes = validateErrors(raw.errors, raw.modules, problems, defaultErrorShape)
   validateTableOwners(raw.data, raw.modules, problems)
   validateRowWriters(raw.data, raw.modules, problems)
   validateMigrationFiles(raw.data, raw.modules, problems)
