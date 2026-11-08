@@ -69,6 +69,24 @@ export interface PlanFlow {
   failure?: string[]
 }
 
+/** One screen of the product, described at page level only. */
+export interface PlanUi {
+  /** P1, P2, ... */
+  id: string
+  title: string
+  /** Path as the user sees it, e.g. /login or /ledgers/:id. */
+  route: string
+  /** Module that owns this page (must exist). */
+  module: string
+  /** What the page shows, one line per block. */
+  shows: string[]
+  /** HTTP routes the page calls, written as "POST /login"; must be declared in http[]. */
+  calls: string[]
+  /** What the page renders when there is no data or a call fails. */
+  states?: { empty?: string; error?: string }
+  notes?: string
+}
+
 export interface PlanRuntime {
   /** TCP port the service listens on; 0 means "pick any" (tests). */
   port?: number
@@ -129,6 +147,8 @@ export interface Plan {
   runtime?: PlanRuntime
   /** Cross-module call orders: who calls whom, in what order, on which trigger. */
   flows?: PlanFlow[]
+  /** Page-level UI: what each screen shows and which declared routes it calls. */
+  ui?: PlanUi[]
   openQuestions?: string[]
   deliverables: { tree: string; files: Array<{ path: string; purpose: string }> }
 }
@@ -159,6 +179,7 @@ const ROOT_KEYS = new Set([
   'http',
   'runtime',
   'flows',
+  'ui',
   'openQuestions',
   'deliverables',
 ])
@@ -769,6 +790,70 @@ function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>,
   })
 }
 
+function normalizeRoute(text: string): string {
+  const match = /^([A-Za-z]+)\s+(.+)$/.exec(text.trim().replace(/\s+/g, ' '))
+  if (match === null) return text.trim()
+  return `${(match[1] ?? '').toUpperCase()} ${match[2] ?? ''}`
+}
+
+function validateUi(raw: unknown, modulesRaw: unknown, httpRaw: unknown, problems: PlanProblem[]): void {
+  if (raw === undefined) return
+  if (!Array.isArray(raw)) {
+    problems.push({ code: 'UI_PAGE_INVALID', path: '/ui', message: 'must be an array' })
+    return
+  }
+  const modules = new Set(
+    Array.isArray(modulesRaw)
+      ? modulesRaw.map((entry) => (typeof entry === 'object' && entry !== null ? String((entry as { id?: unknown }).id ?? '') : ''))
+      : [],
+  )
+  const routes = new Set<string>()
+  if (Array.isArray(httpRaw)) {
+    for (const entry of httpRaw) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const record = entry as { method?: unknown; path?: unknown }
+      routes.add(normalizeRoute(`${String(record.method ?? '')} ${String(record.path ?? '')}`))
+    }
+  }
+  const seen = new Set<string>()
+  raw.forEach((entry, index) => {
+    const at = `/ui/${index}`
+    if (typeof entry !== 'object' || entry === null) {
+      problems.push({ code: 'UI_PAGE_INVALID', path: at, message: 'must be an object' })
+      return
+    }
+    const page = entry as Record<string, unknown>
+    const id = typeof page.id === 'string' ? page.id.trim() : ''
+    if (!/^P[0-9]{1,2}$/.test(id)) problems.push({ code: 'UI_PAGE_INVALID', path: `${at}/id`, message: 'must look like "P1"' })
+    else if (seen.has(id)) problems.push({ code: 'UI_PAGE_INVALID', path: `${at}/id`, message: `duplicate page id "${id}"` })
+    else seen.add(id)
+    if (typeof page.title !== 'string' || page.title.trim() === '') {
+      problems.push({ code: 'UI_PAGE_INVALID', path: `${at}/title`, message: 'must be a non-empty string' })
+    }
+    const route = typeof page.route === 'string' ? page.route.trim() : ''
+    if (!route.startsWith('/')) problems.push({ code: 'UI_PAGE_INVALID', path: `${at}/route`, message: 'must start with "/"' })
+    const owner = typeof page.module === 'string' ? page.module.trim() : ''
+    if (!modules.has(owner)) problems.push({ code: 'UI_PAGE_INVALID', path: `${at}/module`, message: `module "${owner}" does not exist` })
+    if (!Array.isArray(page.shows) || page.shows.length === 0) {
+      problems.push({ code: 'UI_PAGE_INVALID', path: `${at}/shows`, message: 'must be a non-empty array of strings' })
+    }
+    if (!Array.isArray(page.calls)) {
+      problems.push({ code: 'UI_PAGE_INVALID', path: `${at}/calls`, message: 'must be an array (use [] for a page with no backend call)' })
+    } else {
+      page.calls.forEach((call, callIndex) => {
+        const text = typeof call === 'string' ? call.trim().replace(/\s+/g, ' ') : ''
+        if (!routes.has(normalizeRoute(text))) {
+          problems.push({
+            code: 'UI_PAGE_INVALID',
+            path: `${at}/calls/${callIndex}`,
+            message: `page calls undeclared route "${String(call)}"; declare it in http[] first`,
+          })
+        }
+      })
+    }
+  })
+}
+
 function validateFlows(raw: unknown, modulesRaw: unknown, errorCodes: Set<string>, problems: PlanProblem[]): void {
   if (raw === undefined) return
   if (!Array.isArray(raw)) {
@@ -1350,6 +1435,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
   validateNotNullColumns(raw.data, raw.modules, raw.types, problems)
   validateHttp(raw.http, raw.modules, new Set(typeNames), problems)
   validateFlows(raw.flows, raw.modules, new Set(errorCodes), problems)
+  validateUi(raw.ui, raw.modules, raw.http, problems)
   validateAcceptanceRoutes(raw.modules, raw.http, problems)
   validateTypeClosure(raw, new Set(typeNames), problems)
   validateErrorRefs(raw.modules, new Set(errorCodes), problems)

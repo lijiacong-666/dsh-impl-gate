@@ -118,6 +118,13 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
       lines.push(`- \`${flow.id}\` ${flow.name}：第 ${positions.join('、')}/${total} 步（触发：${flow.trigger}）`)
     }
   }
+  const myPages = (plan.ui ?? []).filter((page) => page.module === module.id)
+  if (myPages.length > 0) {
+    lines.push('', '### 4.3 你负责的页面', '')
+    for (const page of myPages) {
+      lines.push(`- \`${page.id}\` ${page.title}（${page.route}）调用 ${page.calls.length === 0 ? '（无后端调用）' : page.calls.join('；')}`)
+    }
+  }
   lines.push('', '## 5 约束', '')
   if (module.constraints.length === 0) {
     lines.push(`- ${NONE}`)

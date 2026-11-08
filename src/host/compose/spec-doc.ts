@@ -299,6 +299,29 @@ export function renderSpecDoc(input: SpecDocInput): string {
   lines.push('```text', tree.length > 0 ? plan.deliverables.tree.trimEnd() : '（无）', '```', '')
   lines.push(...table(['文件', '用途'], plan.deliverables.files.map((file) => [file.path, file.purpose])), '')
 
+  const pages = plan.ui ?? []
+  lines.push('## 10 界面（页面级）', '')
+  if (pages.length === 0) {
+    lines.push('（未声明；需要界面时在 plan 里加 ui[]，写明每页展示什么、调用哪条已声明路由）', '')
+  } else {
+    lines.push(
+      ...table(
+        ['页面', '路由', '归属模块', '调用'],
+        pages.map((page) => [`${page.id} ${page.title}`, page.route, page.module, page.calls.length === 0 ? '（无）' : page.calls.join('；')]),
+      ),
+      '',
+    )
+    for (const page of pages) {
+      const details: string[] = []
+      details.push(`展示：${page.shows.join('；')}`)
+      if (page.states?.empty !== undefined) details.push(`空态：${page.states.empty}`)
+      if (page.states?.error !== undefined) details.push(`错误态：${page.states.error}`)
+      if (page.notes !== undefined) details.push(`备注：${page.notes}`)
+      lines.push(`- **${page.id} ${page.title}**（${page.route}）：${details.join('　')}`)
+    }
+    lines.push('')
+  }
+
   lines.push('## 附录 A 未决问题', '')
   lines.push(...listOrNone(plan.openQuestions ?? []), '')
 
