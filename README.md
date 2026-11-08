@@ -1,4 +1,4 @@
-﻿<!-- 写作规范见 playbooks/reference/readme.md；与 README.en.md 保持相同章节。 -->
+<!-- 写作规范见 playbooks/reference/readme.md；与 README.en.md 保持相同章节。 -->
 
 # Impl Gate
 
@@ -177,7 +177,6 @@ dsh plugin --profile headless add dsh-impl-gate
 | `PYTHON_ENV_MISSING` | 解释器导入不了 specgraph（compose 写盘前 preflight 失败；check/export 返回非 JSON 失败） |
 | `PLAN_HAS_CYCLE` | `impl_gate_init`：plan 的模块依赖成环；由 `validatePlan` 的环检测转出，`code` 是原因串而非 §5 错误码，message 带 `A → B → A` |
 | `E_PLAN_EXISTS` | `impl_gate_compose` 的 `plan` 模式：`compose-plan.json` 已存在且未传 `overwrite:true`。用 `mode:"draft"` 刷新草稿，或显式 `overwrite:true`（会先写 `compose-plan.backup-<时间戳>.json`） |
-| `E_OUT_DIR_NOT_EMPTY` | `outDir` 里已有合同之外的文件；只允许 `compose-plan.json` 与 `SPEC-DRAFT.md` |
 | `PLAN_INVALID` | plan 没填或填错；`problems[]` 逐条带 JSON Pointer，例如 `/stack must be a non-empty string`、`/data/0/owner must be a non-empty string` |
 | `PLAN_MISSING` | `materialize` 与 `init` 找不到 `compose-plan.json` |
 | `GRAPH_INVALID` | 物化出的图没过 spec-graph 的 check，`graphIssues` 原样返回 |
@@ -271,6 +270,7 @@ pnpm verify        # typecheck → build lib/ → node --test → 包内容检�
 ## 许可证
 
 [Apache License 2.0](LICENSE)
+
 
 
 

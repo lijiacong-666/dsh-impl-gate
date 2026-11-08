@@ -715,16 +715,8 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
     }
   }
 
-  const entries = await fs.promises.readdir(outDir)
-  const allowed = new Set(['compose-plan.json', 'SPEC-DRAFT.md'])
-  const unexpected = entries.filter((entry) => !allowed.has(entry))
-  if (unexpected.length > 0 && args.overwrite !== true) {
-    return fail(
-      'E_OUT_DIR_NOT_EMPTY',
-      `outDir is not empty: ${outDir}`,
-      `${unexpected.length} entr${unexpected.length === 1 ? 'y' : 'ies'} other than compose-plan.json/SPEC-DRAFT.md; pass overwrite:true only if you mean to write into it`,
-    )
-  }
+  // A project directory usually has files already; plan mode only writes the
+  // two files it owns, so an otherwise non-empty outDir is fine.
   if (existingPlan !== undefined && args.overwrite !== true) {
     return fail(
       'E_PLAN_EXISTS',

@@ -169,15 +169,16 @@ test('draft covers all nine sections and every module', async () => {
   assert.ok(draft.includes('本文件由 impl_gate_compose 生成'))
 })
 
-test('a non-empty outDir needs overwrite:true', async () => {
+test('plan mode writes into a non-empty project directory without resetting anything', async () => {
   const outDir = tempDir()
   fs.writeFileSync(path.join(outDir, 'keep.txt'), 'x')
-  const refused = await buildCompose({ outDir, mode: 'plan' })
-  assert.equal(refused.error.code, 'E_OUT_DIR_NOT_EMPTY')
-
-  const allowed = await buildCompose({ outDir, mode: 'plan', overwrite: true })
-  assert.equal(allowed.ok, true)
+  const first = await buildCompose({ outDir, mode: 'plan' })
+  assert.equal(first.ok, true)
   assert.ok(fs.existsSync(path.join(outDir, 'keep.txt')))
+  assert.ok(fs.existsSync(path.join(outDir, 'compose-plan.json')))
+
+  const second = await buildCompose({ outDir, mode: 'plan' })
+  assert.equal(second.error.code, 'E_PLAN_EXISTS')
 })
 
 test('materialize without a compose-plan.json returns E_PLAN_MISSING', async () => {
