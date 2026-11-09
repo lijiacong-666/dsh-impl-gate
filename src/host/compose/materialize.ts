@@ -24,7 +24,12 @@ import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
 import { initTasks } from '../init/init.js'
 
 export interface ComposeWarning {
-  code: 'COVERAGE_GAP' | 'ERROR_OWNER_MISSING' | 'AUTH_UNSPECIFIED' | 'ERROR_UNUSED'
+  code:
+    | 'COVERAGE_GAP'
+    | 'ERROR_OWNER_MISSING'
+    | 'AUTH_UNSPECIFIED'
+    | 'ERROR_UNUSED'
+    | 'FILE_OWNERSHIP_OVERLAP'
   count: number
   items: string[]
 }
@@ -175,6 +180,23 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   if (unused.length > 0) out.push({ code: 'ERROR_UNUSED', count: unused.length, items: unused })
   const noAuth = (plan.http ?? []).filter((entry) => entry.auth === undefined).map((entry) => `${entry.method} ${entry.path}`)
   if (noAuth.length > 0) out.push({ code: 'AUTH_UNSPECIFIED', count: noAuth.length, items: noAuth })
+
+  // Two modules claiming the same file (or paths that differ only by case) is the
+  // failure mode that shows up as "we both wrote it" after the fact. Warnings, not
+  // errors: a shared fixture path is defensible, a collision is not.
+  const owners = new Map<string, Set<string>>()
+  for (const module of plan.modules) {
+    for (const file of module.files ?? []) {
+      const key = file.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase()
+      const set = owners.get(key) ?? new Set<string>()
+      set.add(module.id)
+      owners.set(key, set)
+    }
+  }
+  const clashes = [...owners.entries()]
+    .filter(([, modules]) => modules.size > 1)
+    .map(([file, modules]) => `${file} ← ${[...modules].sort().join(', ')}`)
+  if (clashes.length > 0) out.push({ code: 'FILE_OWNERSHIP_OVERLAP', count: clashes.length, items: clashes })
   return out
 }
 

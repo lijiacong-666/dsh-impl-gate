@@ -108,3 +108,14 @@ test('referencing the code in a flow failure also counts', () => {
   plan.flows = [{ id: 'F1', name: 'f', trigger: 'POST /auth/login', steps: [{ module: 'M3', action: 'login' }], success: 'ok', failure: ['E_FLOW'] }]
   assert.equal(collectWarnings(plan).filter((entry) => entry.code === 'ERROR_UNUSED').length, 0)
 })
+
+test('two modules claiming the same file is reported', () => {
+  const plan = basePlan()
+  plan.modules[0].files.push('shared/schema.sql')
+  plan.modules[1].files.push('Shared/Schema.sql')
+  const warnings = collectWarnings(plan)
+  const clash = warnings.find((entry) => entry.code === 'FILE_OWNERSHIP_OVERLAP')
+  assert.ok(clash !== undefined)
+  assert.equal(clash.count, 1)
+  assert.match(clash.items[0], /^shared\/schema\.sql ← M1, M2$/)
+})
