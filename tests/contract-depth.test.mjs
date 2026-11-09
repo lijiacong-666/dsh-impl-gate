@@ -120,6 +120,19 @@ test('built-in generics pass; a type named Pool must still be declared', () => {
   assert.ok(messagesOf(bad).some((message) => message.includes('undefined type reference "Pool"')))
 })
 
+test('a signature may declare its own generic parameter', () => {
+  const ok = basePlan()
+  ok.modules[0].exposes.push({
+    kind: 'fn',
+    signature: 'runInTransaction<T>(work: (tx: T) => Promise<T>): Promise<T>',
+  })
+  assert.deepEqual(problemsOf(ok), [])
+
+  const bad = basePlan()
+  bad.modules[0].exposes.push({ kind: 'fn', signature: 'runInTransaction<T>(work: (tx: T) => Promise<Missing>)' })
+  assert.ok(messagesOf(bad).some((message) => message.includes('undefined type reference "Missing"')))
+})
+
 test('an E_ code used in a constraint must exist in errors, with a pointer', () => {
   const plan = basePlan()
   plan.modules[0].constraints.push('令牌过期返回 E_TOKEN_EXPIRED')

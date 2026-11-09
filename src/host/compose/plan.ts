@@ -972,9 +972,20 @@ function validateTypeClosure(raw: Json, typeNames: Set<string>, problems: PlanPr
   const reported = new Set<string>()
   for (const ref of refs) {
     const pattern = ref.mode === 'signature' ? TYPE_SLOT_REF_RE : TYPE_REF_RE
+    // Generic parameters are declared by the signature itself: `runInTransaction<T>(…)`
+    // must not be reported as an undefined type named "T" (D-24).
+    const declared = new Set<string>()
+    if (ref.mode === 'signature') {
+      for (const generic of ref.text.matchAll(/<\s*([A-Z][0-9]?(?:\s*,\s*[A-Z][0-9]?)*)\s*>/g)) {
+        const captured = generic[1]
+        if (captured === undefined) continue
+        for (const name of captured.split(',')) declared.add(name.trim())
+      }
+    }
     for (const match of ref.text.matchAll(pattern)) {
       const name = ref.mode === 'signature' ? match[1] : match[0]
       if (name === undefined) continue
+      if (declared.has(name)) continue
       if (typeNames.has(name) || BUILTIN_TYPES.has(name) || reported.has(name)) continue
       reported.add(name)
       problem(problems, ref.path, `undefined type reference "${name}" at ${ref.path}`)
