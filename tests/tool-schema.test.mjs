@@ -81,7 +81,7 @@ function definitions() {
   })
 }
 
-test('exactly four tools are registered', () => {
+test('the six public tools are registered', () => {
   const names = definitions().map((tool) => tool.name)
   assert.deepEqual(names, [
     'impl_gate_check',
@@ -89,6 +89,7 @@ test('exactly four tools are registered', () => {
     'impl_gate_verify_contract',
     'impl_gate_compose',
     'impl_gate_init',
+    'impl_gate_review',
   ])
 })
 

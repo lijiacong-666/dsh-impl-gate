@@ -12,7 +12,7 @@
 
 - **调用而非重写**：每次检查都 spawn `python -m specgraph check --json`，图的问题按原样返回（`graphIssues` + `graphExitCode`）。
 - **32 条逐条裁决**：A（交付物）、B（实现边界）、M（模块/导入）、Q（质量）四组，每条产出 `status` + `evidence`（≤2 KB）；判不了的写 NOT-RUN，不猜。
-- **五个工具**：`impl_gate_check` 跑一次并缓存；`impl_gate_report` 读缓存出汇总与勾选表；`impl_gate_verify_contract` 只复核 A1–A5；`impl_gate_compose` 出契约图谱与 SPEC；`impl_gate_init` 出多 AI 并行任务卡。
+- **六个工具**：`impl_gate_check` 跑一次并缓存；`impl_gate_report` 读缓存出汇总与勾选表；`impl_gate_verify_contract` 只复核 A1–A5；`impl_gate_compose` 出契约图谱与 SPEC；`impl_gate_init` 出多 AI 并行任务卡；`impl_gate_review` 把「每个模块能不能直接开工」的评审落到 `.impl-gate/review.json`。
 
 ## 不做什么
 
@@ -115,6 +115,27 @@ dsh plugin --profile headless add dsh-impl-gate
 | `impl_gate_verify_contract` | `root`（必填）、`runId` | 只复核 A1–A5，不重跑其他断言 |
 | `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`（plan 已存在则 `E_PLAN_EXISTS`，不会覆盖）；`draft` 只按现有 plan 刷新 `SPEC-DRAFT.md`，从不写 plan；`materialize` 生成图谱、`SPEC.md`、`export/`、`.impl-gate/checklist.md` 与 `.impl-gate/mapping.md` |
 | `impl_gate_init` | `outDir`（必填）、`implRoot`、`overwrite` | 按波次生成 `<outDir>/tasks/`：`TASKS.md`、`cards.json`、`wave-<n>/<id>-<dir>.md`；不改图谱、`SPEC.md`、`export/` |
+| `impl_gate_review` | `outDir`（必填）、`reviewer`（必填）、`round`、`verdicts`（必填） | 追加一轮评审到 `<outDir>/.impl-gate/review.json`：每模块 `ready`/`clarify`/`blocked`，`blocked` 带 `blocking[]`；同轮重复提交拒绝 |
+
+### 评审留痕（0.3.1）
+
+`SPEC.md` 好不好，不能只看机器校验通没通——机器查引用闭合、表归属、路由声明，查不出「这个模块照着文档能不能直接写」。所以把「评审」变成一个可留痕的动作：
+
+```
+impl_gate_review({
+  "outDir": "D:/work/account-service",
+  "reviewer": "reviewer-agent-3",
+  "verdicts": [
+    { "module": "M1", "status": "ready" },
+    { "module": "M3", "status": "blocked", "blocking": ["createBooking 没拿到 employeeId"] }
+  ]
+})
+```
+
+- 三态：`ready`（能直接开工）、`clarify`（开工会上问一句就能开工）、`blocked`（照文档写不出来）。
+- 过线标准是 **`blocked == 0 且 blocking == 0`**，不是「比例好看」；同一份文档换评审者分数会差很多，比例不可复现。
+- 每轮写一行到 `.impl-gate/review.json`，按 `round` 递增、同轮拒绝覆盖；换评审者/换轮次都留痕。
+- 评审只写证据，不改 `SPEC.md`、plan 或图谱；要改的是 plan，改完重跑 materialize，再评下一轮。
 
 ### `impl_gate_compose` 的输出结构
 

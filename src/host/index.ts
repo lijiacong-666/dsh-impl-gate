@@ -15,6 +15,8 @@ export { renderGraphToml, renderModuleSpec, findExposeIndex } from './compose/gr
 export { renderSpecDoc } from './compose/spec-doc.js'
 export { isRunRecord, materializePlan } from './compose/materialize.js'
 export { collectWarnings } from './compose/materialize.js'
+export { recordReview } from './review/review.js'
+export type { ReviewPayload, ReviewVerdict, ReviewStatus } from './review/review.js'
 export { renderChecklistTemplate, mergeChecklist, CHECKLIST_REL } from './compose/checklist-template.js'
 export { renderMappingTemplate, MAPPING_REL } from './compose/mapping-template.js'
 export { loadChecks, checksFilePath } from './checks.js'

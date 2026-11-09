@@ -57,6 +57,20 @@ impl_gate_compose({
 返回 `graphRoot`、`specMd`、`packageMd`、`manifestPath`、`waves`、`overlaps`。
 `graphIssues` 非空说明图不合法，按条改 plan，不要手改生成的 spec.md。
 
+### 第 3.5 步：独立评审（可选但强烈建议）
+
+把 `SPEC.md` 交给一个**没参与写 plan** 的评审者（人或子智能体），只让它读 `SPEC.md`，逐模块判三态：`ready` / `clarify` / `blocked`，`blocked` 必须写出具体缺口。然后落盘：
+
+```
+impl_gate_review({
+  "outDir": "D:/work/account-service",
+  "reviewer": "reviewer-agent-3",
+  "verdicts": [{ "module": "M1", "status": "ready" }, { "module": "M3", "status": "blocked", "blocking": ["..."] }]
+})
+```
+
+过线标准是 `blocked == 0 且 blocking == 0`。没过线就回第 2 步改 plan，不要开始实现——评审意见指向的是 plan 的矛盾，不是 SPEC 的错字。同一份文档换评审者分数会差很多，所以只看 blocking 是否清零。
+
 ### 第 4 步：init 出任务卡
 
 ```

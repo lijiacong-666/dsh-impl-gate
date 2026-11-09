@@ -28,6 +28,7 @@
 
 | D-20 | materialize 重跑不重置 `PASS`/`FAIL` 行，旧 `checklist.md` 先备份为 `.impl-gate/checklist.md.bak-<时间戳>` | 改进清单 1.1：重跑会把已填证据清空、A1 从 PASS 回退 NOT-RUN。选择「保留 + 备份」而不是「重置 + 计数」，因为验收证据是人工/外部进程写入的，工具无权丢弃；代价是改 plan 后保留行可能过期，靠 `stale design` 与人工复核兜底 | 已批（0.3.1 自定） |
 | D-21 | `ownership.json` 记 `plan_sha256`/`generated_at`/真实版本号；`impl_gate_check` 检测不一致时只打 `stale design` 警告，不 FAIL | 改进清单 1.2：版本写死 `@0.2`、无 plan 哈希。只警告是因为「设计改了但还没重跑」属于流程中间态，直接判 FAIL 会让第一次 check 无法用 | 已批（0.3.1 自定） |
+| D-23 | `review.json` 按 `round` 追加、同轮拒绝覆盖，不与 `plan_sha256` 绑定；评审只写证据，不改 plan/SPEC/图谱 | 评审是过程证据，「哪一轮评的是哪版 plan」靠 `round` 与 `stale design` 提示，绑定哈希会让读旧轮次变得麻烦 | 已批（0.3.1 自定） |
 | D-22 | A3 重放时剥掉 `exit:N` 标记（此前会被当作命令参数，导致 `replayed exit 2`） | 改进清单未列，实测发现：`command:python -m specgraph check … exit:0` 重放 argv 多一个 `exit:0`，python 报 `unrecognized arguments` 判 FAIL | 已按实际行为关闭 |
 
 ## 维护规则

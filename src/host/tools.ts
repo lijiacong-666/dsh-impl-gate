@@ -14,6 +14,7 @@ import { renderDraft } from './compose/draft.js'
 import { materializePlan } from './compose/materialize.js'
 import { emptyPlan, missingSlots, type PlanProblem } from './compose/plan.js'
 import { initTasks, type InitFailure, type InitPayload } from './init/init.js'
+import { recordReview, type ReviewPayload } from './review/review.js'
 import { hashContractFiles } from './graph-hash.js'
 import {
   SpecgraphError,
@@ -1144,6 +1145,99 @@ const composeOutputSchema = {
   },
 }
 
+
+const reviewParameters = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    outDir: { type: 'string', description: '含 compose-plan.json 与 SPEC.md 的项目目录（绝对路径）。' },
+    reviewer: { type: 'string', description: '评审者标识（人或者子智能体 id），写进 review.json 作为证据。' },
+    round: { type: 'number', description: '轮次；缺省 = 已有轮次 + 1。同一轮重复提交会被拒绝。' },
+    verdicts: {
+      type: 'array',
+      description: '每个模块一条：ready=能直接开工，clarify=开工会上问一句就能开工，blocked=照文档写不出来。',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          module: { type: 'string', description: '模块 id，必须存在于 plan。' },
+          status: { type: 'string', enum: ['ready', 'clarify', 'blocked'] },
+          note: { type: 'string', description: '一句话理由。' },
+          blocking: { type: 'array', items: { type: 'string' }, description: 'blocked 时必须给出具体缺口。' },
+        },
+        required: ['module', 'status'],
+      },
+    },
+  },
+  required: ['outDir', 'reviewer', 'verdicts'],
+}
+
+const reviewOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ok: { type: 'boolean' },
+    reviewPath: { type: 'string' },
+    round: { type: 'number' },
+    ready: { type: 'number' },
+    clarify: { type: 'number' },
+    blocked: { type: 'number' },
+    blocking: { type: 'number' },
+    total: { type: 'number' },
+    error: {
+      type: 'object',
+      additionalProperties: false,
+      properties: { code: { type: 'string' }, message: { type: 'string' }, detail: { type: 'string' } },
+      required: ['code', 'message'],
+    },
+  },
+  required: ['ok'],
+}
+
+function renderReview(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
+  const payload = value as Partial<ReviewPayload> & { ok?: boolean; error?: { code: string; message: string; detail?: string } }
+  // a recorded round is always ok:true; a failure is { ok:false, error }
+  if (payload.error !== undefined && payload.ok !== true) {
+    return [{ type: 'text', text: `impl_gate_review failed: ${payload.error.code} — ${payload.error.message}` }]
+  }
+  const lines = [
+    `impl_gate_review: round ${payload.round ?? 0} recorded at ${payload.reviewPath ?? ''}`,
+    `verdicts: ready ${payload.ready ?? 0} / clarify ${payload.clarify ?? 0} / blocked ${payload.blocked ?? 0} (of ${payload.total ?? 0} modules)`,
+    `blocking items: ${payload.blocking ?? 0}`,
+  ]
+  if ((payload.blocked ?? 0) > 0 || (payload.blocking ?? 0) > 0) {
+    lines.push('这条评审未过线：blocked 或 blocking>0 时先改 plan 再重跑 materialize，不要开始实现。')
+  } else {
+    lines.push('评审过线：可以进入 impl_gate_init 分发。')
+  }
+  return [{ type: 'text', text: lines.join('\n') }]
+}
+
+const review = {
+  name: 'impl_gate_review',
+  description:
+    'Record one review round of a generated SPEC.md into <outDir>/.impl-gate/review.json. ' +
+    'A reviewer (human or another agent) marks every module ready / clarify / blocked with reasons. ' +
+    'It appends rounds and never edits the plan, SPEC.md or the graph; use it before impl_gate_init so the ' +
+    '"can we start?" judgement is evidence instead of chat history. The pass line is blocking = 0.',
+  parameters: reviewParameters,
+  output: { schema: reviewOutputSchema, render: renderReview },
+  async execute(args: unknown) {
+    const input = (args ?? {}) as { outDir?: string; reviewer?: string; round?: number; verdicts?: import('./review/review.js').ReviewVerdict[] }
+    if (typeof input.outDir !== 'string' || input.outDir.trim() === '') {
+      return { ok: false, error: { code: 'E_ROOT_MISSING', message: 'outDir is required' } }
+    }
+    if (typeof input.reviewer !== 'string') {
+      return { ok: false, error: { code: 'REVIEW_INVALID', message: 'reviewer is required' } }
+    }
+    return await recordReview(input.outDir, {
+      reviewer: input.reviewer,
+      ...(input.round === undefined ? {} : { round: input.round }),
+      verdicts: Array.isArray(input.verdicts) ? input.verdicts : [],
+    })
+  },
+}
+
 const initParameters = {
   type: 'object',
   additionalProperties: false,
@@ -1296,5 +1390,5 @@ export function buildTools(deps: ToolDeps) {
     },
   }
 
-  return [check, report, verify, compose, init]
+  return [check, report, verify, compose, init, review]
 }
