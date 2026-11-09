@@ -30,6 +30,7 @@ export interface ComposeWarning {
     | 'AUTH_UNSPECIFIED'
     | 'ERROR_UNUSED'
     | 'FILE_OWNERSHIP_OVERLAP'
+    | 'CONSTRAINT_HAS_PATH'
   count: number
   items: string[]
 }
@@ -149,6 +150,8 @@ function hashFile(file: string): string {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
 
+const FILE_PATH_RE = /(?:^|[\s（(，,、])(?:[\w.-]+\/)*[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|sql|html|css|json|md|yml|yaml)\b/
+
 /** Signals a reviewer must not miss: gaps that validatePlan tolerates on purpose. */
 export function collectWarnings(plan: Plan): ComposeWarning[] {
   const out: ComposeWarning[] = []
@@ -197,6 +200,17 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .filter(([, modules]) => modules.size > 1)
     .map(([file, modules]) => `${file} ← ${[...modules].sort().join(', ')}`)
   if (clashes.length > 0) out.push({ code: 'FILE_OWNERSHIP_OVERLAP', count: clashes.length, items: clashes })
+
+  // specgraph rejects concrete file paths inside spec prose (IMPL_FILE_PATH): a
+  // path in a constraint fails the graph check after every file is already
+  // written. Catch it before the run instead of after.
+  const pathish: string[] = []
+  for (const module of plan.modules) {
+    for (const text of module.constraints ?? []) {
+      if (FILE_PATH_RE.test(text)) pathish.push(module.id + ': ' + text.slice(0, 80))
+    }
+  }
+  if (pathish.length > 0) out.push({ code: 'CONSTRAINT_HAS_PATH', count: pathish.length, items: pathish })
   return out
 }
 
@@ -356,7 +370,10 @@ export async function materializePlan(
     await fs.promises.writeFile(full, body, 'utf8')
   }
   // Written before `check` so a failed run can be fixed and re-run in place.
-  await writeOwnership(outDir, generated, planSha256)
+  // Keep files a previous successful run owned: a failed attempt only rewrote part
+  // of the tree, and dropping those entries would make them look foreign next time.
+  const ownedBefore = previousOwnership?.generated ?? []
+  await writeOwnership(outDir, [...new Set([...ownedBefore, ...generated])], planSha256)
 
   const runner = { argv: environment.argv, cwd: environment.cwd, env: environment.env, timeoutMs: config.timeoutMs }
   let checkOutput
@@ -375,11 +392,15 @@ export async function materializePlan(
         `${checkOutput.stderr}\n${checkOutput.stdout}`.trim().slice(-4096) || undefined,
       )
     }
+    const hints = collectWarnings(plan)
+      .map((entry) => `warning ${entry.code} (${entry.count}): ${entry.items.slice(0, 3).join('; ')}`)
+      .join('\n')
+    const detail = [checkOutput.stderr.slice(-2048), hints].filter((part) => part !== '').join('\n')
     return {
       ...failure(
         'GRAPH_INVALID',
         `specgraph check rejected ${target} (exit ${checkOutput.exitCode})`,
-        checkOutput.stderr.slice(-4096) || undefined,
+        detail === '' ? undefined : detail,
       ),
       issues,
       graphExitCode: checkOutput.exitCode,

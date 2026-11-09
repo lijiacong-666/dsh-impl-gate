@@ -380,3 +380,4 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 6. **单模块波次也当并行**：读起来像可以拆给多人，实际只有一个模块。→ TASKS.md 会标“（独立）”；按标注分发。
 7. **`data` 留空**：materialize 直接 `PLAN_INVALID`。→ 至少写一张表，哪怕只有 `id` 与业务键。
 8. **`acceptance` 只写“功能正常”**：gate 无法复现，只能 FAIL。→ 写命令、断言与预期退出码。
+9. **在 `constraints`/`acceptance` 里写具体文件路径或语言名**：specgraph 会报 `IMPL_FILE_PATH` / `IMPL_LANGUAGE`，materialize 直接失败（exit 1），而 plan 校验本身不会提前告诉你。→ 路径只写进 `modules[].files` 与 `deliverables`，约束写「必须满足什么」；确属业务术语（如日志字段名）时再加词表白名单。

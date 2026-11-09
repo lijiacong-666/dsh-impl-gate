@@ -109,6 +109,16 @@ test('referencing the code in a flow failure also counts', () => {
   assert.equal(collectWarnings(plan).filter((entry) => entry.code === 'ERROR_UNUSED').length, 0)
 })
 
+test('a concrete path inside a constraint is flagged before the graph check', () => {
+  const plan = basePlan()
+  plan.modules[0].constraints.push('样式放在 public/styles.css 里')
+  const warnings = collectWarnings(plan)
+  const hit = warnings.find((entry) => entry.code === 'CONSTRAINT_HAS_PATH')
+  assert.ok(hit !== undefined)
+  assert.equal(hit.count, 1)
+  assert.match(hit.items[0], /^M1: .*public\/styles\.css/)
+})
+
 test('two modules claiming the same file is reported', () => {
   const plan = basePlan()
   plan.modules[0].files.push('shared/schema.sql')
