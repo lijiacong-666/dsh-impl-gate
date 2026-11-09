@@ -220,14 +220,26 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   const routes = plan.http ?? []
   const asserted = new Set<string>()
   const unstated: string[] = []
+  const seen = new Set<string>()
+  const routePath = (raw: string): string => {
+    const cut = raw.split('?')[0] ?? raw
+    return cut.replace(/[.,;:!?。，；：、」』”’"'）)]+$/u, '')
+  }
   for (const module of plan.modules) {
     for (const item of module.acceptance ?? []) {
-      for (const match of item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s,，；;）)]*)/g)) {
-        const key = `${match[1]} ${match[2]}`
+      for (const match of item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+([^\s,，、；;）)」』"']*)/g)) {
+        const rawPath = match[2]
+        if (rawPath === undefined) continue
+        const path = routePath(rawPath)
+        const key = `${match[1]} ${path}`
         asserted.add(key)
-        const route = routes.find((entry) => entry.method === match[1] && entry.path === match[2])
+        const route = routes.find((entry) => entry.method === match[1] && entry.path === path)
         if (route !== undefined && (route.auth ?? 'public') !== 'public' && !/Origin|401/i.test(item.assertion)) {
-          unstated.push(`${module.id}: ${key} needs ${route.auth}`)
+          const line = `${module.id}: ${key} needs ${route.auth}`
+          if (!seen.has(line)) {
+            seen.add(line)
+            unstated.push(line)
+          }
         }
       }
     }
