@@ -380,4 +380,8 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 6. **单模块波次也当并行**：读起来像可以拆给多人，实际只有一个模块。→ TASKS.md 会标“（独立）”；按标注分发。
 7. **`data` 留空**：materialize 直接 `PLAN_INVALID`。→ 至少写一张表，哪怕只有 `id` 与业务键。
 8. **`acceptance` 只写“功能正常”**：gate 无法复现，只能 FAIL。→ 写命令、断言与预期退出码。
-9. **在 `constraints`/`acceptance` 里写具体文件路径或语言名**：specgraph 会报 `IMPL_FILE_PATH` / `IMPL_LANGUAGE`，materialize 直接失败（exit 1），而 plan 校验本身不会提前告诉你。→ 路径只写进 `modules[].files` 与 `deliverables`，约束写「必须满足什么」；确属业务术语（如日志字段名）时再加词表白名单。
+9. **在 `constraints`/`acceptance` 里写具体文件路径或语言名**：specgraph 会报 `IMPL_FILE_PATH` / `IMPL_LANGUAGE`，materialize 直接失败（exit 1），而 plan 校验本身不会提前告诉你。→ 路径只写进 `modules[].files` 与 `deliverables`，约束写「必须满足什么」；确属业务术语（如日志字段名）时再加词表白名单
+10. **壳模块（启动/注册路由）被业务模块 requires**：会形成 `M2 → M8 → M2` 的环，`validatePlan` 直接拒绝。→ 壳模块单向依赖业务模块；业务模块需要的数据库句柄、错误构造器等基础能力放到 M1，不要从壳里取。
+11. **每个模块都写 HTTP 级 AC**：模块本身没有路由、壳还没到，AC 在自己的波次里根本无法执行（materialize 现在会报 `AC_HTTP_OUTSIDE_SHELL` 警告）。→ 模块 AC 直接调本模块函数；HTTP 级断言集中到壳模块的 AC。
+12. **只给页面/静态资源写文件、不给路由**：页面永远 404。→ 静态资源由壳模块注册 `GET /app.js`、`GET /styles.css`（或以 `staticFiles()` 返回的 route 为准），页面模块提供 `staticFiles()` 与 `serve*Page`，壳只调用、不自造。
+13. **响应头没人负责**：CSV、HTML、静态资源的 `content-type` 与 `X-Row-Count` 若无唯一归属，实现者会用框架默认值。→ 在壳模块的约束里写死三类规则，并让返回载荷带 `contentType` 字段。。
