@@ -139,6 +139,8 @@ export interface Plan {
     constraints: string[]
     files: string[]
     acceptance: Array<{ id: string; assertion: string; test: string; covers?: string }>
+    /** Pin this module to a wave; must not be earlier than its dependencies allow. */
+    wave?: number
   }>
   types?: PlanType[]
   errors?: PlanError[]
@@ -193,6 +195,7 @@ const MODULE_KEYS = new Set([
   'constraints',
   'files',
   'acceptance',
+  'wave',
 ])
 const EXPOSE_KEYS = new Set(['kind', 'signature', 'note'])
 const REQUIRE_KEYS = new Set(['module', 'item', 'why'])
@@ -443,6 +446,12 @@ function validateModules(
       if (unsafe !== null) problem(problems, pointer(at, 'dir'), unsafe)
       if (dirs.has(dir)) problem(problems, pointer(at, 'dir'), `duplicate module dir "${dir}"`)
       dirs.add(dir)
+    }
+    if (entry.wave !== undefined) {
+      const wave = entry.wave
+      if (typeof wave !== 'number' || !Number.isInteger(wave) || wave < 1) {
+        problem(problems, pointer(at, 'wave'), 'must be a positive integer (wave number) when given')
+      }
     }
     readString(entry.title, pointer(at, 'title'), problems)
     readString(entry.responsibility, pointer(at, 'responsibility'), problems)

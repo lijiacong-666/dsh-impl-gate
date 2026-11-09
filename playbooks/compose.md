@@ -106,6 +106,7 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `runtime` | 被设计系统怎么运行：`port`/`start`/`health`/`migrate`/`rollback`（可选，但强烈建议） | `{port:"8080",start:"pnpm start",health:"/healthz",migrate:"pnpm migrate"}` | 只写「能跑起来就行」 |
 | `flows` | 跨模块调用顺序（可选，但强烈建议）：谁在什么触发下按什么顺序调谁 | `{id:"F1",name:"登录",trigger:"POST /auth/login",steps:[{module:"M3",action:"login"},{module:"M2",action:"verifyPassword"}],success:"返回 TokenPair",failure:["E_AUTH_INVALID"]}` | 只写「先查用户再验密码」这种散文 |
 | `ui` | 页面级界面（可选）：每页展示什么块、调用哪条已声明路由、空/错态怎么写 | `[{id:"P1",title:"登录页",route:"/login",module:"M7",shows:["账号输入框","登录按钮"],calls:["POST /auth/login"],states:{error:"表单上方显示错误文案"}}]` | 把接口清单整段抄进 `calls` 而不核对 `http[]`；或直接写组件树 |
+| `modules[].wave` | 把某模块钉到更晚的波次（不能早于依赖允许的位置） | `"wave": 5` | 用它表达「必须是最后一波」而不是补 requires |
 | `openQuestions` | 自己拿不准、需要人裁决的点 | `["token 是否要支持刷新"]` | 用注释代替 |
 | `modules` | 模块数组，至少 1 个 | 见下 | 没有模块 |
 | `deliverables` | 交付树与文件清单 | `{tree:"...",files:[{path,purpose}]}` | 只写 tree |

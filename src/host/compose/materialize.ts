@@ -24,7 +24,7 @@ import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
 import { initTasks } from '../init/init.js'
 
 export interface ComposeWarning {
-  code: 'COVERAGE_GAP' | 'ERROR_OWNER_MISSING' | 'AUTH_UNSPECIFIED'
+  code: 'COVERAGE_GAP' | 'ERROR_OWNER_MISSING' | 'AUTH_UNSPECIFIED' | 'ERROR_UNUSED'
   count: number
   items: string[]
 }
@@ -145,7 +145,7 @@ function hashFile(file: string): string {
 }
 
 /** Signals a reviewer must not miss: gaps that validatePlan tolerates on purpose. */
-function collectWarnings(plan: Plan): ComposeWarning[] {
+export function collectWarnings(plan: Plan): ComposeWarning[] {
   const out: ComposeWarning[] = []
   const covered = new Set<string>()
   for (const module of plan.modules) {
@@ -159,6 +159,20 @@ function collectWarnings(plan: Plan): ComposeWarning[] {
   }
   const noOwner = (plan.errors ?? []).filter((entry) => entry.by === undefined || entry.by === '').map((entry) => entry.code)
   if (noOwner.length > 0) out.push({ code: 'ERROR_OWNER_MISSING', count: noOwner.length, items: noOwner })
+  const referenced = new Set<string>()
+  for (const module of plan.modules) {
+    for (const text of module.constraints ?? []) {
+      for (const match of text.matchAll(/\bE_[A-Z0-9_]+\b/g)) referenced.add(match[0])
+    }
+    for (const item of module.acceptance ?? []) {
+      for (const match of item.assertion.matchAll(/\bE_[A-Z0-9_]+\b/g)) referenced.add(match[0])
+    }
+  }
+  for (const flow of plan.flows ?? []) {
+    for (const code of flow.failure ?? []) referenced.add(code)
+  }
+  const unused = (plan.errors ?? []).map((entry) => entry.code).filter((code) => !referenced.has(code))
+  if (unused.length > 0) out.push({ code: 'ERROR_UNUSED', count: unused.length, items: unused })
   const noAuth = (plan.http ?? []).filter((entry) => entry.auth === undefined).map((entry) => `${entry.method} ${entry.path}`)
   if (noAuth.length > 0) out.push({ code: 'AUTH_UNSPECIFIED', count: noAuth.length, items: noAuth })
   return out

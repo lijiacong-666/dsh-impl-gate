@@ -117,6 +117,50 @@ export function computeWaves(plan: Plan): WavesOutcome {
     index += 1
   }
 
+  // Pins: a module may ask for a later wave (e.g. a demo page after the API),
+  // but never earlier than its dependencies allow.
+  const baseLayer = new Map<string, number>()
+  waves.forEach((wave) => {
+    for (const id of wave.modules) baseLayer.set(id, wave.index)
+  })
+  const pinned = new Map<string, number>()
+  for (const module of plan.modules) {
+    const pin = module.wave
+    if (pin === undefined) continue
+    const base = baseLayer.get(module.id) ?? 1
+    if (pin < base) {
+      return {
+        ok: false,
+        code: 'PLAN_INVALID',
+        message: `module "${module.id}" is pinned to wave ${pin} but its dependencies place it in wave ${base} or later`,
+      }
+    }
+    pinned.set(module.id, pin)
+  }
+  if (pinned.size > 0) {
+    const layered = new Map<number, string[]>()
+    for (const module of plan.modules) {
+      const layer = Math.max(baseLayer.get(module.id) ?? 1, pinned.get(module.id) ?? 1)
+      const bucket = layered.get(layer) ?? []
+      bucket.push(module.id)
+      layered.set(layer, bucket)
+    }
+    const rebuilt: Wave[] = []
+    for (const layer of [...layered.keys()].sort((a, b) => a - b)) {
+      const ids = (layered.get(layer) ?? []).sort()
+      const dependsOn = new Set<string>()
+      for (const id of ids) {
+        const module = plan.modules.find((entry) => entry.id === id)
+        for (const need of module?.requires ?? []) {
+          if (!ids.includes(need.module)) dependsOn.add(need.module)
+        }
+      }
+      rebuilt.push({ index: rebuilt.length + 1, modules: ids, dependsOn: [...dependsOn].sort() })
+    }
+    waves.length = 0
+    waves.push(...rebuilt)
+  }
+
   const filesById = new Map<string, Set<string>>()
   for (const module of plan.modules) filesById.set(module.id, new Set(module.files))
   const overlaps: WaveOverlap[] = []
