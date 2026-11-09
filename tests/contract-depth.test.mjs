@@ -198,7 +198,7 @@ test('SPEC 4.2/4.3/4.4 render types, errors and the http surface', () => {
   assert.match(doc, /### 4\.3 错误码/)
   assert.match(doc, /\| E_AUTH_INVALID \| 401 \| M1 \| 账号或密码错误 \|/)
   assert.match(doc, /### 4\.4 接口面/)
-  assert.match(doc, /\| POST \| \/login \| M1 \| public \| LoginInput \| TokenPair \|/)
+  assert.match(doc, /\| POST \| \/login \| M1 \| \w+\(\) \| public \| LoginInput \| TokenPair \|/)
 })
 
 test('SPEC 4.2/4.3/4.4 say （无） when the plan declares nothing', () => {

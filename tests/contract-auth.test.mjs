@@ -50,7 +50,7 @@ test('auth and by are accepted and rendered', () => {
   assert.deepEqual(validatePlan(plan).problems, [])
   const doc = renderSpecDoc({ plan, waves: computeWaves(plan).result })
   assert.match(doc, /\| E_FORBIDDEN \| 403 \| M1 \| 非管理员 \|/)
-  assert.match(doc, /\| DELETE \| \/things\/:id \| M1 \| admin \|/)
+  assert.match(doc, /\| DELETE \| \/things\/:id \| M1 \| \w+\(\) \| admin \|/)
   assert.match(doc, /204（无响应体）/)
 })
 

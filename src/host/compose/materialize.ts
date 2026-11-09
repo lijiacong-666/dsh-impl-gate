@@ -31,6 +31,8 @@ export interface ComposeWarning {
     | 'ERROR_UNUSED'
     | 'FILE_OWNERSHIP_OVERLAP'
     | 'CONSTRAINT_HAS_PATH'
+    | 'AC_AUTH_UNSTATED'
+    | 'HTTP_ROUTE_UNCOVERED'
   count: number
   items: string[]
 }
@@ -211,6 +213,27 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (pathish.length > 0) out.push({ code: 'CONSTRAINT_HAS_PATH', count: pathish.length, items: pathish })
+
+  // A route that needs a session but whose acceptance rows call it bare will be
+  // reviewed as "works in the doc, 401 in reality". Also flag routes no AC touches.
+  const routes = plan.http ?? []
+  const asserted = new Set<string>()
+  const unstated: string[] = []
+  for (const module of plan.modules) {
+    for (const item of module.acceptance ?? []) {
+      for (const match of item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s,，；;）)]*)/g)) {
+        const key = `${match[1]} ${match[2]}`
+        asserted.add(key)
+        const route = routes.find((entry) => entry.method === match[1] && entry.path === match[2])
+        if (route !== undefined && (route.auth ?? 'public') !== 'public' && !/Origin|401/i.test(item.assertion)) {
+          unstated.push(`${module.id}: ${key} needs ${route.auth}`)
+        }
+      }
+    }
+  }
+  if (unstated.length > 0) out.push({ code: 'AC_AUTH_UNSTATED', count: unstated.length, items: unstated })
+  const uncovered = routes.filter((route) => !asserted.has(`${route.method} ${route.path}`)).map((route) => `${route.method} ${route.path}`)
+  if (uncovered.length > 0) out.push({ code: 'HTTP_ROUTE_UNCOVERED', count: uncovered.length, items: uncovered })
   return out
 }
 

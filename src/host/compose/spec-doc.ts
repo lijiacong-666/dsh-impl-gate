@@ -166,11 +166,12 @@ export function renderSpecDoc(input: SpecDocInput): string {
     lines.push('（无）', '')
   } else {
     lines.push(...table(
-      ['方法', '路径', '处理模块', '鉴权', '请求', '响应'],
+      ['方法', '路径', '处理模块', '处理函数', '鉴权', '请求', '响应'],
       http.map((route) => [
         route.method,
         route.path,
         route.module,
+        `${route.handler}()`,
         route.auth ?? 'public',
         route.req ?? '（无）',
         route.res.trim() === 'void' ? '204（无响应体）' : route.res,
