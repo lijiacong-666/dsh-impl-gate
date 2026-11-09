@@ -48,6 +48,10 @@ export interface PlanHttp {
   resExample?: string
   /** Who may call it: public / session / admin. Absent renders as public. */
   auth?: 'public' | 'session' | 'admin'
+  /** Success status code. Absent renders as 204 for `res:"void"`, otherwise 200. */
+  status?: number
+  /** Response headers that are part of the contract, e.g. `{ "X-Row-Count": "<int>" }`. */
+  resHeaders?: Record<string, string>
 }
 
 export interface PlanFlowStep {
@@ -209,7 +213,7 @@ const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
 const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note'])
 const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
 const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape', 'by'])
-const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth', 'reqExample', 'resExample'])
+const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth', 'reqExample', 'resExample', 'status', 'resHeaders'])
 const FLOW_KEYS = new Set(['id', 'name', 'trigger', 'steps', 'success', 'failure'])
 const RUNTIME_KEYS = new Set(['port', 'start', 'health', 'migrate', 'rollback'])
 const FLOW_STEP_KEYS = new Set(['module', 'action', 'note'])
@@ -783,6 +787,31 @@ function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>,
       }
     }
     readString(entry.res, pointer(at, 'res'), problems)
+    const status = entry.status
+    if (status !== undefined) {
+      if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 599) {
+        problem(problems, pointer(at, 'status'), 'must be an integer between 100 and 599')
+      } else if (typeof entry.res === 'string') {
+        if (entry.res.trim() === 'void' && status !== 204) {
+          problem(problems, pointer(at, 'status'), 'a void response must use status 204')
+        } else if (entry.res.trim() !== 'void' && status === 204) {
+          problem(problems, pointer(at, 'status'), 'status 204 needs res "void"')
+        }
+      }
+    }
+    if (entry.resHeaders !== undefined) {
+      const headers = entry.resHeaders
+      if (!isRecord(headers)) {
+        problem(problems, pointer(at, 'resHeaders'), 'must be an object of header name to value')
+      } else {
+        for (const [name, value] of Object.entries(headers)) {
+          if (name.trim().length === 0) problem(problems, pointer(at, 'resHeaders'), 'header name must not be empty')
+          if (typeof value !== 'string' || value.trim().length === 0) {
+            problem(problems, pointer(at, 'resHeaders'), `header "${name}" must be a non-empty string`)
+          }
+        }
+      }
+    }
     for (const field of ['reqExample', 'resExample'] as const) {
       const value = entry[field]
       if (value === undefined) continue

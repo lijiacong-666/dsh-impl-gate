@@ -166,22 +166,33 @@ export function renderSpecDoc(input: SpecDocInput): string {
     lines.push('（无）', '')
   } else {
     lines.push(...table(
-      ['方法', '路径', '处理模块', '处理函数', '鉴权', '请求', '响应'],
+      ['方法', '路径', '处理模块', '处理函数', '鉴权', '状态码', '请求', '响应'],
       http.map((route) => [
         route.method,
         route.path,
         route.module,
         `${route.handler}()`,
         route.auth ?? 'public',
+        String(route.status ?? (route.res.trim() === 'void' ? 204 : 200)),
         route.req ?? '（无）',
         route.res.trim() === 'void' ? '204（无响应体）' : route.res,
       ]),
     ), '')
+    const withHeaders = http.filter((route) => route.resHeaders !== undefined)
+    if (withHeaders.length > 0) {
+      lines.push('响应头（契约的一部分）：', '')
+      for (const route of withHeaders) {
+        const pairs = Object.entries(route.resHeaders ?? {}).map(([name, value]) => `${name}: ${value}`)
+        lines.push(`- ${route.method} ${route.path} — ${pairs.join('；')}`)
+      }
+      lines.push('')
+    }
     const documented = http.filter((route) => route.reqExample !== undefined || route.resExample !== undefined)
     for (const route of documented) {
       lines.push(`#### ${route.method} ${route.path} 示例`, '')
+      const bodyless = route.method === 'GET' || route.method === 'DELETE'
       if (route.reqExample !== undefined) {
-        lines.push('请求体：', '', '```json', route.reqExample.trim(), '```', '')
+        lines.push(bodyless ? '查询参数示例：' : '请求体：', '', '```json', route.reqExample.trim(), '```', '')
       }
       if (route.resExample !== undefined) {
         lines.push('响应体：', '', '```json', route.resExample.trim(), '```', '')

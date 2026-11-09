@@ -168,6 +168,8 @@ impl_gate_review({
 
 **契约字段（0.3.0）**：`http[].auth` 三选一 `public|session|admin`（缺省按 `public` 渲染）、`res:"void"` 渲染成「204（无响应体）」；`errors[].by` 写抛出模块 id，4.3 打印「归属模块」列，模块不存在会报 `/errors/<i>/by: module "M9" does not exist`。
 
+**成功状态码与响应头（0.3.2）**：`http[].status` 写成功状态码（不写默认 200，`res:"void"` 默认 204；写了 204 却不是 `void`、或 `void` 写了非 204，都会 `PLAN_INVALID`）；`http[].resHeaders` 写属于契约的响应头（如 `{"X-Row-Count":"<int>"}`），4.4 节单独列出「响应头（契约的一部分）」。GET/DELETE 的 `reqExample` 现在标成「查询参数示例」，不再冒充请求体。
+
 **验收表骨架**：materialize 会按 `checks/impl-gate.checks.json` 写 `.impl-gate/checklist.md`——32 行、全是 `NOT-RUN / NOT_IMPLEMENTED`、evidence 指向 `SPEC.md:1`，并带 `## 未覆盖` 段。用 `impl_gate_check` 配 `implRoot=<outDir>` 跑一次，设计阶段能判的 A1–A5、B2、B7、Q10 会直接给出结论（实测 `PASS 8 / FAIL 0 / NOT-RUN 24`）；其余行等实现证据。
 
 **重跑不丢证据（0.3.1）**：改 plan 后再次 `materialize` 只重写 `NOT-RUN` 行；已填 `PASS`/`FAIL` 的行连同 evidence 原样保留，旧文件先备份到 `.impl-gate/checklist.md.bak-<时间戳>`，结果里带 `checklistPreserved` 与 `checklistBackupPath`。注意 `impl_gate_check` 只看 `NOT-RUN` 与 `## 未覆盖` 是否对称——保留行不会因为 plan 改了而被判失效，这是有意的：改 plan 后请人工复核保留行的 evidence 是否仍成立。

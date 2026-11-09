@@ -116,7 +116,7 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `data` | 表、字段、建表模块与运行时写入方，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
 | `types` | 契约里用到的类型定义（可选） | `{name:"User",kind:"object",fields:[…]}` | 只写类型名不写字段 |
 | `errors` | 错误码目录（可选，但被引用就必须声明）；建议每条写 `by`（哪个模块抛出它） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误",shape:"{\"error\":{\"code\",\"message\"}}",by:"M1"}` | 只写 `E_` 前缀 |
-| `http` | 对外路由（可选）；`auth` 写明 `public`/`session`/`admin`，无响应体写 `res:"void"`；建议附 `reqExample`/`resExample`（真实 JSON 报文） | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair",auth:"public",reqExample:"{\"account\":\"a\"}",resExample:"{\"accessToken\":\"t\"}"}` | 路径不写 `/`；示例用单引号或省略字段名 |
+| `http` | 对外路由（可选）；`auth` 写明 `public`/`session`/`admin`，无响应体写 `res:"void"`；**成功状态码写 `status`**（不写默认 200、void 默认 204），**契约相关的响应头写 `resHeaders`**；建议附 `reqExample`/`resExample`（真实 JSON 报文，GET 的示例是查询参数） | `{method:"POST",path:"/login",module:"M1",handler:"login",res:"TokenPair",auth:"public",status:200,resHeaders:{"X-Request-Id":"<uuid>"},reqExample:"{\"account\":\"a\"}",resExample:"{\"accessToken\":\"t\"}"}` | 路径不写 `/`；示例用单引号或省略字段名；只写「成功返回 200」这种散文 |
 | `runtime` | 被设计系统怎么运行：`port`/`start`/`health`/`migrate`/`rollback`（可选，但强烈建议） | `{port:"8080",start:"pnpm start",health:"/healthz",migrate:"pnpm migrate"}` | 只写「能跑起来就行」 |
 | `flows` | 跨模块调用顺序（可选，但强烈建议）：谁在什么触发下按什么顺序调谁 | `{id:"F1",name:"登录",trigger:"POST /auth/login",steps:[{module:"M3",action:"login"},{module:"M2",action:"verifyPassword"}],success:"返回 TokenPair",failure:["E_AUTH_INVALID"]}` | 只写「先查用户再验密码」这种散文 |
 | `ui` | 页面级界面（可选）：每页展示什么块、调用哪条已声明路由、空/错态怎么写 | `[{id:"P1",title:"登录页",route:"/login",module:"M7",shows:["账号输入框","登录按钮"],calls:["POST /auth/login"],states:{error:"表单上方显示错误文案"}}]` | 把接口清单整段抄进 `calls` 而不核对 `http[]`；或直接写组件树 |
@@ -385,3 +385,7 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 11. **每个模块都写 HTTP 级 AC**：模块本身没有路由、壳还没到，AC 在自己的波次里根本无法执行（materialize 现在会报 `AC_HTTP_OUTSIDE_SHELL` 警告）。→ 模块 AC 直接调本模块函数；HTTP 级断言集中到壳模块的 AC。
 12. **只给页面/静态资源写文件、不给路由**：页面永远 404。→ 静态资源由壳模块注册 `GET /app.js`、`GET /styles.css`（或以 `staticFiles()` 返回的 route 为准），页面模块提供 `staticFiles()` 与 `serve*Page`，壳只调用、不自造。
 13. **响应头没人负责**：CSV、HTML、静态资源的 `content-type` 与 `X-Row-Count` 若无唯一归属，实现者会用框架默认值。→ 在壳模块的约束里写死三类规则，并让返回载荷带 `contentType` 字段。。
+14. **DTO 只写进 `types`、不写进任何人的 `files`**：实现者不知道这些类型该放哪个文件，于是每个模块各建一份，跨模块签名对不上。→ 在 `types[]` 里给共享类型标 `owner`（哪个模块的哪个文件），只在本模块内用的类型写进该模块 `files`。
+15. **成功状态码留白**：写「创建成功返回对象」，实现者按 200 写，验收方按 201 测，直接吵起来。→ `http[].status` 写死；`res:"void"` 必须 204。
+16. **未定义行为不写**：排序规则、分页缺省、非法参数是 400 还是空列表、跳过/删除的记录算不算进统计——这些“显然”的地方实现者只能猜。→ 要么在 `constraints` 写死，要么加一条能机械判定的 AC；猜不出时写进 `openQuestions`，别让它留在空白里。
+17. **依赖版本与测试方式不落地**：playbook 只说「Node 22」，fastify 4/5、better-sqlite3 11/12、vitest 还是 `node:test` 全靠猜。→ 在 `globals.conventions` 或 `stack` 里写清版本与测试命令，卡片的 AC 直接引用该命令。
