@@ -33,6 +33,7 @@ export interface ComposeWarning {
     | 'CONSTRAINT_HAS_PATH'
     | 'AC_AUTH_UNSTATED'
     | 'HTTP_ROUTE_UNCOVERED'
+    | 'AC_HTTP_OUTSIDE_SHELL'
   count: number
   items: string[]
 }
@@ -234,6 +235,19 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   if (unstated.length > 0) out.push({ code: 'AC_AUTH_UNSTATED', count: unstated.length, items: unstated })
   const uncovered = routes.filter((route) => !asserted.has(`${route.method} ${route.path}`)).map((route) => `${route.method} ${route.path}`)
   if (uncovered.length > 0) out.push({ code: 'HTTP_ROUTE_UNCOVERED', count: uncovered.length, items: uncovered })
+
+  // A module with no route of its own cannot pass an HTTP-level assertion: the
+  // shell that listens is a later wave, so such an AC can only fail at its own
+  // wave and forces the whole plan to be validated after full integration.
+  const outside: string[] = []
+  for (const module of plan.modules) {
+    const owns = routes.some((route) => route.module === module.id)
+    if (owns) continue
+    for (const item of module.acceptance ?? []) {
+      if (/\b(GET|POST|PUT|PATCH|DELETE)\s+\//.test(item.assertion)) outside.push(`${module.id}: ${item.id}`)
+    }
+  }
+  if (outside.length > 0) out.push({ code: 'AC_HTTP_OUTSIDE_SHELL', count: outside.length, items: outside })
   return out
 }
 

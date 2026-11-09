@@ -119,6 +119,15 @@ test('a concrete path inside a constraint is flagged before the graph check', ()
   assert.match(hit.items[0], /^M1: .*public\/styles\.css/)
 })
 
+test('an http assertion on a module without routes is flagged', () => {
+  const plan = basePlan()
+  plan.modules[0].acceptance.push({ id: 'M1-http', assertion: 'POST /auth/login 返回 200', covers: 'G1' })
+  const warnings = collectWarnings(plan)
+  const hit = warnings.find((entry) => entry.code === 'AC_HTTP_OUTSIDE_SHELL')
+  assert.ok(hit !== undefined)
+  assert.deepEqual(hit.items, ['M1: M1-http'])
+})
+
 test('two modules claiming the same file is reported', () => {
   const plan = basePlan()
   plan.modules[0].files.push('shared/schema.sql')
