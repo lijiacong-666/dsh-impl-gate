@@ -207,6 +207,8 @@ impl_gate_review({
 （`AC_SHELL_LATER` 0.3.8 起只报「调用了别的模块的路由」；模块自己拥有那条路由时，测试可以自己挂 app，不再误报。）
 
 **实测（最小 e2e）**：单模块、90 行任务卡，交给没读过 plan 的实现者，写出 3 个文件、5/5 测试通过；impl_gate_record 出 PASS 3，impl_gate_check 回显同一份证据。它提出的 5 个「文档没写」问题、以及这次暴露的两个 gate 误判，都记在 [docs/CASE-STUDY-mini.md](docs/CASE-STUDY-mini.md)。
+**实测（完整项目）**：同一句需求生成的 7 模块、24 路由、47 KB SPEC，由 6 个独立实现者只读任务卡写成，`impl_gate_record` 一次 21/21 PASS，`impl_gate_check` 回显同一份证据；实现者暴露的 9 个留白里有 5 个已回灌契约且代码零改动。过程与数字见 [docs/CASE-STUDY-run-log.md](docs/CASE-STUDY-run-log.md)。
+
 
 **共享类型归属（0.3.3）**：`types[].owner` 写「哪个模块的文件定义并导出它」，渲染成类型块下的「归属：M1」。跨模块共用的类型没有 `owner` 时 materialize 会出 `TYPE_OWNER_MISSING` 警告——这正是「六个 DTO、六份各不相同的形状」的来源。
 
