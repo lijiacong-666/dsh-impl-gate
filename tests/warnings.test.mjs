@@ -238,3 +238,17 @@ test('an all-nullable PATCH request type is reported', () => {
   assert.ok(warning)
   assert.deepEqual(warning.items, ['ThingPatch'])
 })
+test('BOUNDARY_UNUSED flags a declared dependency nobody else mentions', () => {
+  const plan = basePlan()
+  plan.boundaries = [{ dependency: 'redis', purpose: '缓存', version: '7', fallback: '降级为进程内缓存' }]
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'BOUNDARY_UNUSED')
+  assert.ok(warning)
+  assert.deepEqual(warning.items, ['redis'])
+})
+
+test('WRITE_NO_VALIDATION_ERROR flags a write route whose module declares no 4xx', () => {
+  const plan = basePlan()
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'WRITE_NO_VALIDATION_ERROR')
+  assert.ok(warning)
+  assert.ok(warning.items.some((item) => item.startsWith('POST /auth/login')))
+})

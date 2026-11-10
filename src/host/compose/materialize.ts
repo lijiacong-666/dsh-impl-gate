@@ -39,6 +39,8 @@ export interface ComposeWarning {
     | 'STATUS_DEFAULTED'
     | 'LIST_ORDER_UNDEFINED'
     | 'PATCH_NULLABLE_AMBIGUOUS'
+    | 'BOUNDARY_UNUSED'
+    | 'WRITE_NO_VALIDATION_ERROR'
   count: number
   items: string[]
 }
@@ -273,6 +275,41 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .map((type) => type.name)
   if (ownerless.length > 0) {
     out.push({ code: 'TYPE_OWNER_MISSING', count: ownerless.length, items: ownerless })
+  }
+
+  // 边界里声明的外部依赖如果全篇再没人提，读者会以为系统真的接了这个依赖，
+  // 而实现者只能按 constraints 里的实际写法来（例如声明 sqlite、实现却是内存表）。
+  const corpus = [
+    plan.stack ?? '',
+    ...(plan.goals ?? []),
+    ...(plan.nonGoals ?? []),
+    ...(plan.globals?.conventions ?? []),
+    ...(plan.globals?.forbidden ?? []),
+    ...(plan.globals?.nfr ?? []),
+    ...(plan.deliverables?.files ?? []).map((file) => `${file.path} ${file.purpose}`),
+    ...plan.modules.flatMap((module) => [module.title, module.responsibility ?? '', ...(module.constraints ?? []), ...(module.files ?? [])]),
+  ]
+    .join('\n')
+    .toLowerCase()
+  const unusedBoundary = (plan.boundaries ?? [])
+    .map((boundary) => boundary.dependency)
+    .filter((dependency) => typeof dependency === 'string' && dependency !== '' && !corpus.includes(dependency.toLowerCase()))
+  // eslint-disable-next-line no-control-regex
+  if (unusedBoundary.length > 0) {
+    out.push({ code: 'BOUNDARY_UNUSED', count: unusedBoundary.length, items: unusedBoundary })
+  }
+
+  // 写路由带请求体却没声明 4xx：实现者只能自己决定“参数错了回什么”。
+  const noValidation = (plan.http ?? [])
+    .filter((entry) => ['POST', 'PATCH', 'PUT'].includes(entry.method))
+    .filter((entry) => entry.req !== undefined && entry.req !== '' && entry.req !== 'void')
+    .filter((entry) => {
+      const own = (plan.errors ?? []).filter((error) => error.by === entry.module)
+      return !own.some((error) => error.status === 400 || error.status === 422)
+    })
+    .map((entry) => `${entry.method} ${entry.path} → ${entry.req ?? ''}`)
+  if (noValidation.length > 0) {
+    out.push({ code: 'WRITE_NO_VALIDATION_ERROR', count: noValidation.length, items: noValidation })
   }
 
   // Two modules claiming the same file (or paths that differ only by case) is the
