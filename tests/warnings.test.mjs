@@ -400,3 +400,16 @@ test('LIST_PAGINATION_UNDECLARED flags totals without page/cursor parameters', (
   plan.http[1].query = [{ name: 'page', type: 'number' }]
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'LIST_PAGINATION_UNDECLARED'))
 })
+
+test('PAGINATION_MODE_CONFLICT flags page and cursor declared together', () => {
+  const plan = basePlan()
+  plan.types.push({ name: 'UserPage', kind: 'object', fields: [{ name: 'items', type: 'User[]' }, { name: 'nextCursor', type: 'string | null' }] })
+  plan.modules[2].exposes.push({ kind: 'http', signature: 'listUsers(): Promise<UserPage>' })
+  plan.http.push({ method: 'GET', path: '/users', module: 'M3', handler: 'listUsers', res: 'UserPage', auth: 'session' })
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'PAGINATION_MODE_CONFLICT'))
+
+  plan.http[1].query = [{ name: 'page', type: 'number' }, { name: 'cursor', type: 'string' }]
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'PAGINATION_MODE_CONFLICT')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /mixes offset and cursor pagination/)
+})

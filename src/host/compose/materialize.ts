@@ -40,6 +40,7 @@ export interface ComposeWarning {
     | 'STATUS_DEFAULTED'
     | 'LIST_ORDER_UNDEFINED'
     | 'LIST_PAGINATION_UNDECLARED'
+    | 'PAGINATION_MODE_CONFLICT'
     | 'PATCH_NULLABLE_AMBIGUOUS'
     | 'BOUNDARY_UNUSED'
     | 'WRITE_NO_VALIDATION_ERROR'
@@ -263,6 +264,21 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     })
     .map((entry) => `${entry.method} ${entry.path} returns ${entry.res ?? ''} with pagination fields but declares no page/limit/cursor query`)
   if (unpaginated.length > 0) out.push({ code: 'LIST_PAGINATION_UNDECLARED', count: unpaginated.length, items: unpaginated })
+
+  // Declaring both offset-style and cursor-style pagination on one route means the
+  // implementer has to invent precedence (what wins when both are sent?).
+  const OFFSET_PARAMS = /^(page|pageSize|perPage|offset|limit)$/i
+  const CURSOR_PARAMS = /^(cursor|after|before)$/i
+  const mixedPaging = (plan.http ?? [])
+    .filter((entry) => {
+      const names = (entry.query ?? []).map((param) => param.name)
+      return names.some((name) => OFFSET_PARAMS.test(name)) && names.some((name) => CURSOR_PARAMS.test(name))
+    })
+    .map((entry) => {
+      const names = (entry.query ?? []).map((param) => param.name).join(', ')
+      return `${entry.method} ${entry.path} mixes offset and cursor pagination (${names})`
+    })
+  if (mixedPaging.length > 0) out.push({ code: 'PAGINATION_MODE_CONFLICT', count: mixedPaging.length, items: mixedPaging })
 
   // A PATCH request type whose every field is nullable cannot express "leave it
   // alone" versus "set it to null": the implementer has to guess.
