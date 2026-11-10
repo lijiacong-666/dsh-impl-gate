@@ -41,6 +41,8 @@ export type EvidenceStatus = 'PASS' | 'FAIL' | 'SKIPPED'
 
 export interface EvidenceItem {
   id: string
+  /** SPEC 里显示的编号（AC-M1-1 形态），与 id 一起构成可追溯的引用。 */
+  ref?: string
   module: string
   command: string
   status: EvidenceStatus
@@ -231,6 +233,30 @@ export function recordAcceptance(outDirRaw: string, options: RecordOptions = {})
     total: merged.length,
   }
 
+  // 按 plan 的模块顺序排列，再给每条证据补上 SPEC §6 里显示的编号（AC-M1-1 形态），
+  // 让任务卡、评审与证据三方用同一个引用。
+  const moduleOrder = new Map(plan.modules.map((module, index) => [module.id, index]))
+  const acceptanceOrder = new Map<string, number>()
+  for (const module of plan.modules) {
+    ;(module.acceptance ?? []).forEach((entry, index) => {
+      acceptanceOrder.set(`${module.id}\u0000${entry.id}`, index)
+    })
+  }
+  merged.sort((a, b) => {
+    const orderA = moduleOrder.get(a.module) ?? Number.MAX_SAFE_INTEGER
+    const orderB = moduleOrder.get(b.module) ?? Number.MAX_SAFE_INTEGER
+    if (orderA !== orderB) return orderA - orderB
+    const acA = acceptanceOrder.get(`${a.module}\u0000${a.id}`) ?? Number.MAX_SAFE_INTEGER
+    const acB = acceptanceOrder.get(`${b.module}\u0000${b.id}`) ?? Number.MAX_SAFE_INTEGER
+    return acA === acB ? a.id.localeCompare(b.id) : acA - acB
+  })
+  const refCounters = new Map<string, number>()
+  for (const item of merged) {
+    const n = (refCounters.get(item.module) ?? 0) + 1
+    refCounters.set(item.module, n)
+    item.ref = `AC-${item.module}-${n}`
+  }
+
   try {
     fs.mkdirSync(path.dirname(evidencePath), { recursive: true })
     fs.writeFileSync(
@@ -270,7 +296,8 @@ export function renderEvidenceDoc(input: {
   lines.push('| AC | 模块 | 状态 | 退出码 | 耗时 | 命令 |')
   lines.push('| --- | --- | --- | --- | --- | --- |')
   for (const item of input.items) {
-    const cells = [item.id, item.module, item.status, item.exitCode === null ? '—' : String(item.exitCode), `${item.durationMs}ms`, item.command === '' ? '（未声明命令）' : `\`${item.command}\``]
+    const label = item.ref === undefined || item.id === item.ref ? item.id : `${item.ref} (${item.id})`
+    const cells = [label, item.module, item.status, item.exitCode === null ? '—' : String(item.exitCode), `${item.durationMs}ms`, item.command === '' ? '（未声明命令）' : `\`${item.command}\``]
     lines.push(`| ${cells.join(' | ')} |`)
   }
   const failed = input.items.filter((item) => item.status === 'FAIL')
