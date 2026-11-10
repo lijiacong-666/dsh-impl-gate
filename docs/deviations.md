@@ -38,3 +38,9 @@
 3. 每条偏离都要写清「与什么不一致」和「为什么」，裁决列写「已批」或「待处置」。
 
 | D-24 | 签名里声明的泛型参数（`runInTransaction<T>(…)` 的 `T`）不视为未声明类型；只认单字母/单字母加数字形式 | 作者被迫用 `<t>` 这类非惯用写法来绕过类型扫描；`Array<Exercise>` 里的 `Exercise` 仍应被校验，所以不能把尖括号里的内容整体豁免 | 已批（0.3.1 自定） |
+
+## D-25 impl_gate_record 只跑 plan 的验收命令
+
+- gate 的 32 条断言里 command 是符号名（impl-gate:*），不可执行；impl_gate_record 因此改为执行 modules[].acceptance[].test。
+- 首词白名单之外的命令一律 SKIPPED/RUNNER_NOT_ALLOWED，不提供 --allow-any 开关。
+- 产物 .impl-gate/ac-evidence.json 与 	asks/EVIDENCE.md 不登记进 ownership.json，materialize 不会把它们当冲突。

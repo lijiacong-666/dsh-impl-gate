@@ -15,6 +15,7 @@ import { materializePlan } from './compose/materialize.js'
 import { emptyPlan, missingSlots, type PlanProblem } from './compose/plan.js'
 import { initTasks, type InitFailure, type InitPayload } from './init/init.js'
 import { recordReview, type ReviewPayload } from './review/review.js'
+import { recordAcceptance, type EvidenceItem, type RecordPayload } from './record/record.js'
 import { hashContractFiles } from './graph-hash.js'
 import {
   SpecgraphError,
@@ -1254,6 +1255,88 @@ const review = {
   },
 }
 
+const recordParameters = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    outDir: { type: 'string', description: '含 compose-plan.json 的项目目录（绝对路径）。' },
+    implRoot: { type: 'string', description: '命令的执行目录，缺省等于 outDir。' },
+    modules: { type: 'array', items: { type: 'string' }, description: '只跑这些模块的验收；缺省=全部。' },
+    timeoutMs: { type: 'number', description: '单条命令超时毫秒，缺省 120000。' },
+    dryRun: { type: 'boolean', description: 'true=只登记将要执行的命令，不真正执行。' },
+  },
+  required: ['outDir'],
+}
+
+const recordOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ok: { type: 'boolean' },
+    evidencePath: { type: 'string' },
+    planSha256: { type: 'string' },
+    summary: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        pass: { type: 'number' },
+        fail: { type: 'number' },
+        skipped: { type: 'number' },
+        total: { type: 'number' },
+      },
+      required: ['pass', 'fail', 'skipped', 'total'],
+    },
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string' },
+          module: { type: 'string' },
+          command: { type: 'string' },
+          status: { type: 'string' },
+          exitCode: { type: 'number' },
+          durationMs: { type: 'number' },
+          tail: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['id', 'module', 'command', 'status', 'exitCode', 'durationMs', 'tail'],
+      },
+    },
+    error: errorSchema,
+  },
+  required: ['ok'],
+}
+
+function renderRecord(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
+  const payload = value as Partial<RecordPayload> & { ok?: boolean; error?: { code: string; message: string; detail?: string } }
+  if (payload.error !== undefined && payload.ok !== true) {
+    return [{ type: 'text', text: `impl_gate_record failed: ${payload.error.code} — ${payload.error.message}` }]
+  }
+  const summary = payload.summary
+  const items = payload.items ?? []
+  const failed = items.filter((item) => item.status === 'FAIL')
+  const lines = [
+    `impl_gate_record: PASS ${summary?.pass ?? 0} / FAIL ${summary?.fail ?? 0} / SKIPPED ${summary?.skipped ?? 0} (total ${summary?.total ?? 0})`,
+    `evidence: ${payload.evidencePath ?? ''}`,
+    `plan sha256: ${(payload.planSha256 ?? '').slice(0, 12)}`,
+  ]
+  if (failed.length > 0) {
+    lines.push(`failed (${failed.length}):`)
+    for (const item of failed.slice(0, 5)) {
+      const firstLine = item.tail === '' ? '' : ` :: ${item.tail.split(/\r?\n/)[0]}`
+      lines.push(`- ${item.id} (${item.module}) exit ${item.exitCode}${firstLine}`)
+    }
+    lines.push('失败的断言要修实现或修文档；把它贴回 plan 的 acceptance 里，不要只留在聊天里。')
+  } else if ((summary?.skipped ?? 0) > 0) {
+    lines.push('没有失败，但有未执行的断言：dryRun、缺命令，或命令首词不在允许列表里。')
+  } else if ((summary?.total ?? 0) > 0) {
+    lines.push('全部通过：这些退出码就是实现的「证据」，把它们连同 evidence 文件一起交付。')
+  }
+  return [{ type: 'text', text: lines.join('\n') }]
+}
+
 const initParameters = {
   type: 'object',
   additionalProperties: false,
@@ -1406,5 +1489,52 @@ export function buildTools(deps: ToolDeps) {
     },
   }
 
-  return [check, report, verify, compose, init, review]
+  const record = {
+    name: 'impl_gate_record',
+    description:
+      'Run the acceptance commands written in <outDir>/compose-plan.json and store the result as evidence ' +
+      '(<outDir>/.impl-gate/ac-evidence.json, plus tasks/EVIDENCE.md when tasks/ exists). ' +
+      'Each row records PASS/FAIL with the real exit code, duration and the log tail. ' +
+      'Commands run in implRoot (default outDir) through the shell, and only commands whose first word is a known ' +
+      'runner (pnpm/npm/node/python/git/...) are executed; anything else is SKIPPED with RUNNER_NOT_ALLOWED. ' +
+      'Use dryRun first to see what would run. This is the implementation-side counterpart of impl_gate_review: ' +
+      'review judges the document, record judges the code against the document.',
+    parameters: recordParameters,
+    output: { schema: recordOutputSchema, render: renderRecord },
+    async execute(args: unknown) {
+      const input = (args ?? {}) as { outDir?: string; implRoot?: string; modules?: string[]; timeoutMs?: number; dryRun?: boolean }
+      if (typeof input.outDir !== 'string' || input.outDir.trim() === '') {
+        return { ok: false, error: { code: 'E_ROOT_MISSING', message: 'outDir is required' } }
+      }
+      try {
+        const outcome = recordAcceptance(input.outDir, {
+          ...(typeof input.implRoot === 'string' && input.implRoot !== '' ? { implRoot: input.implRoot } : {}),
+          ...(Array.isArray(input.modules) ? { modules: input.modules } : {}),
+          ...(typeof input.timeoutMs === 'number' ? { timeoutMs: input.timeoutMs } : {}),
+          ...(input.dryRun === true ? { dryRun: true } : {}),
+        })
+        if (!outcome.ok) return outcome
+        return {
+          ok: true,
+          evidencePath: outcome.evidencePath,
+          planSha256: outcome.planSha256,
+          summary: outcome.summary,
+          items: outcome.items.map((item: EvidenceItem) => ({
+            id: item.id,
+            module: item.module,
+            command: item.command,
+            status: item.status,
+            exitCode: item.exitCode === null ? -1 : item.exitCode,
+            durationMs: item.durationMs,
+            tail: item.tail.length > 600 ? `${item.tail.slice(0, 600)}…` : item.tail,
+            ...(item.reason === undefined ? {} : { reason: item.reason }),
+          })),
+        }
+      } catch (error) {
+        return failureFrom(error)
+      }
+    },
+  }
+
+  return [check, report, verify, compose, init, review, record]
 }

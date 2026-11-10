@@ -370,6 +370,20 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 
 团队约定：FAIL 判定为“契约错”时，禁止在实现侧打补丁绕过；判定为“实现错”时，禁止改 AC 降标准。
 
+## 怎么回填实现证据
+
+`impl_gate_check` 的 32 条里，大部分是给实现完成后的验收用的；实现过程中更直接的证据来自 plan 自己写的验收命令。
+
+```text
+impl_gate_record({ outDir: "<outDir>", implRoot: "<代码根>", dryRun: true })   // 先看会跑哪些命令
+impl_gate_record({ outDir: "<outDir>", implRoot: "<代码根>", modules: ["M2"] }) // 按模块跑
+```
+
+- 命令取自 `modules[].acceptance[].test`，首词必须在白名单（`pnpm`/`npm`/`node`/`python`/`git`/…），否则记 `SKIPPED` 而不是执行
+- 结果落 `.impl-gate/ac-evidence.json`，`tasks/` 存在时同时写 `tasks/EVIDENCE.md`（表格 + 失败日志尾部）
+- FAIL 的判法与 `check` 一致：契约错改 plan，实现错改代码；不要为了变绿把命令改成 `true`
+- 每条 AC 的 `test` 必须能在实现根下独立跑；依赖服务的用例在 `constraints` 里写清前置条件，不要靠“先跑另一个脚本”
+
 ## 常见坑
 
 1. **`exposes` 写成动词**（`login`）：下游只能猜参数。→ 写成完整签名。

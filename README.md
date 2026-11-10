@@ -12,7 +12,7 @@
 
 - **调用而非重写**：每次检查都 spawn `python -m specgraph check --json`，图的问题按原样返回（`graphIssues` + `graphExitCode`）。
 - **32 条逐条裁决**：A（交付物）、B（实现边界）、M（模块/导入）、Q（质量）四组，每条产出 `status` + `evidence`（≤2 KB）；判不了的写 NOT-RUN，不猜。
-- **六个工具**：`impl_gate_check` 跑一次并缓存；`impl_gate_report` 读缓存出汇总与勾选表；`impl_gate_verify_contract` 只复核 A1–A5；`impl_gate_compose` 出契约图谱与 SPEC；`impl_gate_init` 出多 AI 并行任务卡；`impl_gate_review` 把「每个模块能不能直接开工」的评审落到 `.impl-gate/review.json`。
+- **七个工具**：`impl_gate_check` 跑一次并缓存；`impl_gate_report` 读缓存出汇总与勾选表；`impl_gate_verify_contract` 只复核 A1–A5；`impl_gate_compose` 出契约图谱与 SPEC；`impl_gate_init` 出多 AI 并行任务卡；`impl_gate_review` 把「每个模块能不能直接开工」的评审落到 `.impl-gate/review.json`。
 
 ## 不做什么
 
@@ -116,6 +116,22 @@ dsh plugin --profile headless add dsh-impl-gate
 | `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`（plan 已存在则 `E_PLAN_EXISTS`，不会覆盖）；`draft` 只按现有 plan 刷新 `SPEC-DRAFT.md`，从不写 plan；`materialize` 生成图谱、`SPEC.md`、`export/`、`.impl-gate/checklist.md` 与 `.impl-gate/mapping.md` |
 | `impl_gate_init` | `outDir`（必填）、`implRoot`、`overwrite` | 按波次生成 `<outDir>/tasks/`：`TASKS.md`、`cards.json`、`wave-<n>/<id>-<dir>.md`；不改图谱、`SPEC.md`、`export/` |
 | `impl_gate_review` | `outDir`（必填）、`reviewer`（必填）、`round`、`verdicts`（必填） | 追加一轮评审到 `<outDir>/.impl-gate/review.json`：每模块 `ready`/`clarify`/`blocked`，`blocked` 带 `blocking[]`；同轮重复提交拒绝 |
+| `impl_gate_record` | `outDir`（必填）、`implRoot`、`modules`、`timeoutMs`、`dryRun` | 执行 plan 里每条 AC 的 `test` 命令（只认白名单首词），把 PASS/FAIL、退出码、日志尾部写进 `.impl-gate/ac-evidence.json`；`tasks/` 存在时同时刷新 `tasks/EVIDENCE.md` |
+
+### 实现证据（0.3.6）
+
+评审判的是文档，`impl_gate_record` 判的是代码对文档的执行结果。
+
+```text
+impl_gate_record({ outDir: "D:/proj/order-service", implRoot: "D:/code/order-service", dryRun: true })
+impl_gate_record({ outDir: "D:/proj/order-service", implRoot: "D:/code/order-service", modules: ["M2"] })
+```
+
+- 命令来自 plan 的 `modules[].acceptance[].test`，不是 gate 的 32 条断言（后者是符号名，不可执行）
+- 只执行首词在白名单里的命令（`pnpm`/`npm`/`node`/`python`/`git`/…），其余记 `SKIPPED` + `RUNNER_NOT_ALLOWED`
+- 结果写 `.impl-gate/ac-evidence.json`（结构与 `summary`/`items` 同工具输出），`tasks/EVIDENCE.md` 是人类可读版
+- 失败不中断：每条都跑，最后给 `PASS/FAIL/SKIPPED` 汇总；失败项的日志尾部直接进渲染
+- 这是「实现进度」的证据，不改变 gate 的 32 条判定，也不自动勾选 `.impl-gate/checklist.md`
 
 ### 评审留痕（0.3.1）
 
