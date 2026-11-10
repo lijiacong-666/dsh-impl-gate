@@ -43,6 +43,7 @@ export interface ComposeWarning {
     | 'WRITE_NO_VALIDATION_ERROR'
     | 'TYPE_OWNER_NO_SOURCE'
     | 'IN_MEMORY_VS_TABLE'
+    | 'TOOLING_UNOWNED'
   count: number
   items: string[]
 }
@@ -462,13 +463,37 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     const early: string[] = []
     for (const module of plan.modules) {
       if (module.id === shell.id || waveOf(module.id) === 0 || waveOf(module.id) >= shellWave) continue
+      // A module that owns the routes in the assertion can mount its own app in
+      // the test and stay self-contained; only cross-module HTTP calls need the
+      // shell to be alive.
+      const ownRoutes = new Set(
+        routes.filter((route) => route.module === module.id).map((route) => `${route.method} ${route.path}`),
+      )
       for (const item of module.acceptance ?? []) {
-        if (/\b(GET|POST|PUT|PATCH|DELETE)\s+\//.test(item.assertion)) {
-          early.push(`${module.id}: ${item.id} runs in wave ${waveOf(module.id)}, shell ${shell.id} is wave ${shellWave}`)
-        }
+        const mentions = [...item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s，,。）)]*)/g)].map(
+          (match) => `${match[1] ?? ''} ${match[2] ?? ''}`,
+        )
+        if (mentions.length === 0) continue
+        if (mentions.every((mention) => ownRoutes.has(mention))) continue
+        early.push(`${module.id}: ${item.id} runs in wave ${waveOf(module.id)}, shell ${shell.id} is wave ${shellWave}`)
       }
     }
     if (early.length > 0) out.push({ code: 'AC_SHELL_LATER', count: early.length, items: early })
+  }
+
+  // Acceptance commands need a workspace manifest before any wave can run
+  // them; if no module owns one, the first implementer has to invent it.
+  const manifests = ['package.json', 'pyproject.toml', 'go.mod', 'cargo.toml', 'pom.xml', 'build.gradle']
+  const hasCommands = plan.modules.some((module) => (module.acceptance ?? []).some((item) => (item.test ?? '').trim() !== ''))
+  const ownsManifest = plan.modules.some((module) =>
+    (module.files ?? []).some((file) => manifests.includes(file.split('/').pop()?.toLowerCase() ?? '')),
+  )
+  if (hasCommands && !ownsManifest) {
+    out.push({
+      code: 'TOOLING_UNOWNED',
+      count: 1,
+      items: ['no module owns package.json (or another workspace manifest); acceptance commands cannot run in a clean checkout'],
+    })
   }
   return out
 }

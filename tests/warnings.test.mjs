@@ -168,7 +168,37 @@ test('a route mentioned after prose is still counted as asserted', () => {
   const codes = collectWarnings(plan).map((warning) => warning.code)
   assert.equal(codes.includes('HTTP_ROUTE_UNCOVERED'), false)
 })
-test('an HTTP AC in a wave before the shell is reported as AC_SHELL_LATER', () => {
+test('an HTTP AC calling a route it does not own, before the shell wave, is AC_SHELL_LATER', () => {
+  const plan = {
+    modules: [
+      {
+        id: 'M1',
+        wave: 1,
+        requires: [],
+        constraints: [],
+        files: [],
+        acceptance: [{ id: 'AC-M1-1', assertion: 'POST /api/goals 返回 201（借用 M2 的路由）' }],
+      },
+      {
+        id: 'M2',
+        requires: [{ module: 'M1', item: 'doWork', note: '调用 M1' }],
+        constraints: [],
+        files: ['app.ts', 'server.ts'],
+        exposes: [{ kind: 'fn', signature: 'buildServer(): Promise<unknown>' }],
+        acceptance: [{ id: 'AC-M2-1', assertion: '起服务后健康检查 200' }],
+      },
+    ],
+    http: [
+      { method: 'POST', path: '/api/runs', module: 'M1', handler: 'createRun', auth: 'public' },
+      { method: 'POST', path: '/api/goals', module: 'M2', handler: 'putGoal', auth: 'session' },
+    ],
+  }
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'AC_SHELL_LATER')
+  assert.ok(warning)
+  assert.deepEqual(warning.items, ['M1: AC-M1-1 runs in wave 1, shell M2 is wave 2'])
+})
+
+test('an HTTP AC that only touches routes the module owns can mount its own app', () => {
   const plan = {
     modules: [
       {
@@ -183,16 +213,37 @@ test('an HTTP AC in a wave before the shell is reported as AC_SHELL_LATER', () =
         id: 'M2',
         requires: [{ module: 'M1', item: 'doWork', note: '调用 M1' }],
         constraints: [],
-        files: ['app.ts', 'server.ts'],
+        files: ['app.ts'],
         exposes: [{ kind: 'fn', signature: 'buildServer(): Promise<unknown>' }],
-        acceptance: [{ id: 'AC-M2-1', assertion: '起服务后健康检查 200' }],
+        acceptance: [],
       },
     ],
     http: [{ method: 'POST', path: '/api/runs', module: 'M1', handler: 'createRun', auth: 'public' }],
   }
-  const warning = collectWarnings(plan).find((entry) => entry.code === 'AC_SHELL_LATER')
+  const codes = collectWarnings(plan).map((entry) => entry.code)
+  assert.equal(codes.includes('AC_SHELL_LATER'), false)
+})
+
+test('acceptance commands without any owned workspace manifest are flagged', () => {
+  const plan = {
+    modules: [
+      {
+        id: 'M1',
+        requires: [],
+        constraints: [],
+        files: ['src/work.ts'],
+        acceptance: [{ id: 'AC-M1-1', assertion: '能跑', test: 'npx vitest run' }],
+      },
+    ],
+    http: [],
+  }
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'TOOLING_UNOWNED')
   assert.ok(warning)
-  assert.deepEqual(warning.items, ['M1: AC-M1-1 runs in wave 1, shell M2 is wave 2'])
+  assert.match(warning.items[0], /no module owns package\.json/)
+
+  plan.modules[0].files.push('package.json')
+  const codes = collectWarnings(plan).map((entry) => entry.code)
+  assert.equal(codes.includes('TOOLING_UNOWNED'), false)
 })
 test('mutating routes without an explicit status are reported', () => {
   const plan = {
