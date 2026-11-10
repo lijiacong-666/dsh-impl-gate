@@ -202,6 +202,8 @@ impl_gate_review({
 - `WRITE_NO_VALIDATION_ERROR`：POST/PATCH/PUT 带请求体，却没有哪个归属该模块的错误码是 400/422——参数错了回什么只能靠实现者猜
 - `TYPE_OWNER_NO_SOURCE`：类型写了 `owner`，但该模块的白名单里没有一个源码文件（只有 `.sql`/`.md`），实现者没地方「定义并导出」它
 
+**实测（最小 e2e）**：单模块、90 行任务卡，交给没读过 plan 的实现者，写出 3 个文件、5/5 测试通过；impl_gate_record 出 PASS 3，impl_gate_check 回显同一份证据。它提出的 5 个「文档没写」问题、以及这次暴露的两个 gate 误判，都记在 [docs/CASE-STUDY-mini.md](docs/CASE-STUDY-mini.md)。
+
 **共享类型归属（0.3.3）**：`types[].owner` 写「哪个模块的文件定义并导出它」，渲染成类型块下的「归属：M1」。跨模块共用的类型没有 `owner` 时 materialize 会出 `TYPE_OWNER_MISSING` 警告——这正是「六个 DTO、六份各不相同的形状」的来源。
 
 **错误对象契约（0.3.3）**：`SPEC.md` §8 的接口约定固定写死一条——抛出的值必须是 `instanceof Error`，带 `code: string`（取自 §4.3）与可选 `details: unknown`，不要另造裸对象。AC 里断言 `err.code` 时按这条实现。
