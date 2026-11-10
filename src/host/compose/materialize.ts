@@ -17,7 +17,7 @@ import type { Plan, PlanProblem } from './plan.js'
 import { validatePlan } from './plan.js'
 import { renderGraphToml, renderModuleSpec } from './graph.js'
 import { renderSpecDoc } from './spec-doc.js'
-import { computeWaves, type WavesResult } from '../init/waves.js'
+import { computeWaves, type WavesOutcome, type WavesResult } from '../init/waves.js'
 import { loadChecks } from '../checks.js'
 import { CHECKLIST_REL, mergeChecklist, specLineFor } from './checklist-template.js'
 import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
@@ -35,6 +35,7 @@ export interface ComposeWarning {
     | 'HTTP_ROUTE_UNCOVERED'
     | 'TYPE_OWNER_MISSING'
     | 'AC_HTTP_OUTSIDE_SHELL'
+    | 'AC_SHELL_LATER'
   count: number
   items: string[]
 }
@@ -300,6 +301,30 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (outside.length > 0) out.push({ code: 'AC_HTTP_OUTSIDE_SHELL', count: outside.length, items: outside })
+
+  // collectWarnings also runs on partially built plans (tests, drafts), so a
+  // plan that cannot be layered simply skips the wave-order warning.
+  let waves: WavesOutcome | null = null
+  try {
+    waves = computeWaves(plan)
+  } catch {
+    waves = null
+  }
+  const shell = plan.modules.find((module) => (module.exposes ?? []).some((entry) => /\bbuildServer\s*\(/.test(entry.signature ?? '')))
+  if (waves !== null && waves.ok && shell !== undefined) {
+    const waveOf = (id: string): number => waves.result.waves.find((wave) => wave.modules.includes(id))?.index ?? 0
+    const shellWave = waveOf(shell.id)
+    const early: string[] = []
+    for (const module of plan.modules) {
+      if (module.id === shell.id || waveOf(module.id) === 0 || waveOf(module.id) >= shellWave) continue
+      for (const item of module.acceptance ?? []) {
+        if (/\b(GET|POST|PUT|PATCH|DELETE)\s+\//.test(item.assertion)) {
+          early.push(`${module.id}: ${item.id} runs in wave ${waveOf(module.id)}, shell ${shell.id} is wave ${shellWave}`)
+        }
+      }
+    }
+    if (early.length > 0) out.push({ code: 'AC_SHELL_LATER', count: early.length, items: early })
+  }
   return out
 }
 

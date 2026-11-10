@@ -168,3 +168,29 @@ test('a route mentioned after prose is still counted as asserted', () => {
   const codes = collectWarnings(plan).map((warning) => warning.code)
   assert.equal(codes.includes('HTTP_ROUTE_UNCOVERED'), false)
 })
+test('an HTTP AC in a wave before the shell is reported as AC_SHELL_LATER', () => {
+  const plan = {
+    modules: [
+      {
+        id: 'M1',
+        wave: 1,
+        requires: [],
+        constraints: [],
+        files: [],
+        acceptance: [{ id: 'AC-M1-1', assertion: 'POST /api/runs 返回 201' }],
+      },
+      {
+        id: 'M2',
+        requires: [{ module: 'M1', item: 'doWork', note: '调用 M1' }],
+        constraints: [],
+        files: ['app.ts', 'server.ts'],
+        exposes: [{ kind: 'fn', signature: 'buildServer(): Promise<unknown>' }],
+        acceptance: [{ id: 'AC-M2-1', assertion: '起服务后健康检查 200' }],
+      },
+    ],
+    http: [{ method: 'POST', path: '/api/runs', module: 'M1', handler: 'createRun', auth: 'public' }],
+  }
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'AC_SHELL_LATER')
+  assert.ok(warning)
+  assert.deepEqual(warning.items, ['M1: AC-M1-1 runs in wave 1, shell M2 is wave 2'])
+})
