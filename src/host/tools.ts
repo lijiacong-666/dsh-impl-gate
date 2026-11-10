@@ -53,6 +53,8 @@ export interface CheckPayload {
   designStale?: string
   /** Present when impl_gate_record has run against this implRoot. */
   implementation?: { pass: number; fail: number; skipped: number; total: number; generatedAt: string; stale: boolean }
+  /** Present when impl_gate_review has recorded at least one round. */
+  review?: { round: number; reviewer: string; ready: number; clarify: number; blocked: number; blocking: number; stale: boolean }
 }
 
 const MAX_EVIDENCE = 2048
@@ -461,6 +463,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
 
   const staleDesign = designStaleness(implRoot)
   const implementation = implementationEvidence(implRoot)
+  const review = reviewSummary(implRoot)
   const payload: CheckPayload = {
     ...base,
     passed,
@@ -470,9 +473,44 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     durationMs: Date.now() - startedMs,
     ...(staleDesign === undefined ? {} : { designStale: staleDesign }),
     ...(implementation === undefined ? {} : { implementation }),
+    ...(review === undefined ? {} : { review }),
   }
   rememberRun(runId, payload, reasons, graphRoot)
   return payload
+}
+
+/**
+ * 0.3.14: review.json records who judged the plan and when. Check should say
+ * whether that judgement still belongs to the current plan, otherwise "8/8 ready"
+ * from five edits ago reads as if it covers today's document.
+ */
+function reviewSummary(implRoot: string): { round: number; reviewer: string; ready: number; clarify: number; blocked: number; blocking: number; stale: boolean } | undefined {
+  const reviewFile = path.join(implRoot, '.impl-gate', 'review.json')
+  try {
+    if (!fs.existsSync(reviewFile)) return undefined
+    const stored = JSON.parse(fs.readFileSync(reviewFile, 'utf8')) as {
+      rounds?: Array<{ round?: unknown; reviewer?: unknown; planSha256?: unknown; summary?: Record<string, unknown> }>
+    }
+    const rounds = Array.isArray(stored.rounds) ? stored.rounds : []
+    if (rounds.length === 0) return undefined
+    const latest = [...rounds].sort((a, b) => Number(a.round ?? 0) - Number(b.round ?? 0)).at(-1)
+    if (latest === undefined) return undefined
+    const summary = latest.summary ?? {}
+    const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+    const planFile = path.join(implRoot, 'compose-plan.json')
+    const current = fs.existsSync(planFile) ? createHash('sha256').update(fs.readFileSync(planFile)).digest('hex') : ''
+    return {
+      round: num(latest.round),
+      reviewer: typeof latest.reviewer === 'string' ? latest.reviewer : '',
+      ready: num(summary.ready),
+      clarify: num(summary.clarify),
+      blocked: num(summary.blocked),
+      blocking: num(summary.blocking),
+      stale: current !== '' && typeof latest.planSha256 === 'string' && latest.planSha256 !== '' && latest.planSha256 !== current,
+    }
+  } catch {
+    return undefined
+  }
 }
 
 function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
@@ -494,6 +532,14 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
     const impl = payload.implementation
     lines.push(`implementation evidence: PASS ${impl.pass} / FAIL ${impl.fail} / SKIPPED ${impl.skipped} (${impl.total} AC) — recorded ${impl.generatedAt === '' ? 'unknown time' : impl.generatedAt}`)
     if (impl.stale) lines.push('these AC results were produced against an older compose-plan.json; re-run impl_gate_record')
+  }
+  if (payload.review !== undefined) {
+    const review = payload.review
+    const reviewer = review.reviewer === '' ? '(unknown)' : review.reviewer
+    lines.push(
+      `review: round ${review.round} by ${reviewer} — ready ${review.ready} / clarify ${review.clarify} / blocked ${review.blocked} (blocking ${review.blocking})`,
+    )
+    if (review.stale) lines.push('this review was recorded against an older compose-plan.json; run impl_gate_review again')
   }
   return [{ type: 'text', text: lines.join('\n') }]
 }
@@ -1034,6 +1080,20 @@ const checkOutputSchema = {
         stale: { type: 'boolean' },
       },
       required: ['pass', 'fail', 'skipped', 'total', 'generatedAt', 'stale'],
+    },
+    review: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        round: { type: 'number' },
+        reviewer: { type: 'string' },
+        ready: { type: 'number' },
+        clarify: { type: 'number' },
+        blocked: { type: 'number' },
+        blocking: { type: 'number' },
+        stale: { type: 'boolean' },
+      },
+      required: ['round', 'reviewer', 'ready', 'clarify', 'blocked', 'blocking', 'stale'],
     },
     error: errorSchema,
   },

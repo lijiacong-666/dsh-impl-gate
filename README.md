@@ -133,6 +133,7 @@ impl_gate_record({ outDir: "D:/proj/order-service", implRoot: "D:/code/order-ser
 - 失败不中断：每条都跑，最后给 `PASS/FAIL/SKIPPED` 汇总；失败项的日志尾部直接进渲染
 - 这是「实现进度」的证据，不改变 gate 的 32 条判定，也不自动勾选 `.impl-gate/checklist.md`
 - `impl_gate_check` 会读这份文件并多打一行 `implementation evidence: PASS x / FAIL y / SKIPPED z (n AC)`；若证据是在旧 plan 上跑的，会提示重跑
+- 同一份 plan 下多次调用会累积：只带 `modules` 补跑某几个模块时，其他模块上次的证据保留；plan 改过则整体重来（0.3.11）
 
 ### 评审留痕（0.3.1）
 
@@ -155,6 +156,7 @@ impl_gate_review({
 - 每轮同时记下 `compose-plan.json` 与 `SPEC.md` 的 sha256（0.3.5），下一轮 sha 变了才说明评审的是新版；返回值还带 `blocking vs 上一轮` 的增减。
 - 每条 verdict 可带 `evidence: "SPEC.md:<行号>"`（0.3.5），把结论钉到原文；指不到行号等于没查。
 - 评审只写证据，不改 `SPEC.md`、plan 或图谱；要改的是 plan，改完重跑 materialize，再评下一轮。
+- `impl_gate_check` 会回显最新一轮（0.3.14）：`review: round N by … — ready a / clarify b / blocked c (blocking d)`；若这一轮评审时的 plan 与当前 `compose-plan.json` 不同，追加一行提示重评。
 
 ### `impl_gate_compose` 的输出结构
 
