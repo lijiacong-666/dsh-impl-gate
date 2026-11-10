@@ -25,6 +25,9 @@ const required = [
   'icon.svg',
   'cordis.patch.yml',
   'LICENSE',
+  'docs/CASE-STUDY-mini.md',
+  'docs/CASE-STUDY-run-log.md',
+  'docs/CASE-STUDY-pillbox.md',
 ]
 const allowedPlaybooks = new Set([
   'playbooks/compose.md',
@@ -35,7 +38,8 @@ if (pkg.dsh?.client) required.push('lib/client.js')
 const missing = required.filter((file) => !packed.has(file))
 const leaked = [...packed].filter(
   (file) =>
-    /^(src|tests|scripts|docs|\.github)\//.test(file) ||
+    /^(src|tests|scripts|\.github)\//.test(file) ||
+    (file.startsWith('docs/') && !file.endsWith('.md')) ||
     (file.startsWith('playbooks/') && !allowedPlaybooks.has(file)),
 )
 
