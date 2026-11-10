@@ -154,7 +154,10 @@ function hashFile(file: string): string {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
 
-const FILE_PATH_RE = /(?:^|[\s（(，,、])(?:[\w.-]+\/)*[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|sql|html|css|json|md|yml|yaml)\b/
+// Only directory-qualified paths count: a bare `app.js` in prose is a filename
+// reference, while `public/app.js` is the kind of hard-coded path that makes
+// specgraph reject the rendered spec.md.
+const FILE_PATH_RE = /(?:^|[\s（(，,、])(?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|sql|html|css|json|md|yml|yaml)\b/
 
 /** Signals a reviewer must not miss: gaps that validatePlan tolerates on purpose. */
 export function collectWarnings(plan: Plan): ComposeWarning[] {
