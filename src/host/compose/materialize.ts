@@ -44,6 +44,8 @@ export interface ComposeWarning {
     | 'TYPE_OWNER_NO_SOURCE'
     | 'IN_MEMORY_VS_TABLE'
     | 'TOOLING_UNOWNED'
+    | 'AC_STATUS_CONTRADICTION'
+    | 'OPEN_QUESTIONS_PENDING'
   count: number
   items: string[]
 }
@@ -412,6 +414,45 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (unstated.length > 0) out.push({ code: 'AC_AUTH_UNSTATED', count: unstated.length, items: unstated })
+
+  // "returns 201" in an acceptance row while http[] declares 200 leaves the
+  // implementer to pick one; the document must answer before code exists.
+  // Pair a status with the route mentioned just before it — a single row often
+  // covers several routes, and applying one row's status to all of them is noise.
+  const contradictions: string[] = []
+  const statusSeen = new Set<string>()
+  for (const module of plan.modules) {
+    for (const item of module.acceptance ?? []) {
+      const mentions: Array<{ index: number; key: string; path: string }> = []
+      for (const match of item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s，,。）)]*)/g)) {
+        const rawPath = match[2]
+        if (rawPath === undefined || match.index === undefined) continue
+        mentions.push({ index: match.index, key: `${match[1]} ${rawPath}`, path: routePath(rawPath) })
+      }
+      if (mentions.length === 0) continue
+      for (const statusMatch of item.assertion.matchAll(/(?:返回|状态码|status)\D{0,6}([1-5][0-9]{2})/gi)) {
+        if (statusMatch.index === undefined) continue
+        const assertedStatus = Number(statusMatch[1])
+        if (assertedStatus < 200 || assertedStatus > 299) continue
+        const before = mentions.filter((mention) => mention.index <= statusMatch.index)
+        const nearest = before[before.length - 1]
+        if (nearest === undefined) continue
+        if (statusMatch.index - nearest.index > 24) continue
+        const method = nearest.key.split(' ')[0] ?? ''
+        const route = routes.find((entry) => entry.method === method && entry.path === nearest.path)
+        if (route === undefined) continue
+        const declared = route.status ?? (route.res === 'void' ? 204 : 200)
+        if (declared === assertedStatus) continue
+        const line = `${module.id}: ${item.id} asserts ${assertedStatus} for ${method} ${nearest.path}; http[] declares ${declared}`
+        if (statusSeen.has(line)) continue
+        statusSeen.add(line)
+        contradictions.push(line)
+      }
+    }
+  }
+  if (contradictions.length > 0) {
+    out.push({ code: 'AC_STATUS_CONTRADICTION', count: contradictions.length, items: contradictions })
+  }
   // 路由被 flows 的步骤调用、或被页面的 calls 引用，也算“有人走过”：
   // 设计文档里 AC 是单元级的时候，路由本来就不会出现在 AC 里。
   const routeKey = (text: string): string => {
@@ -493,6 +534,16 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
       code: 'TOOLING_UNOWNED',
       count: 1,
       items: ['no module owns package.json (or another workspace manifest); acceptance commands cannot run in a clean checkout'],
+    })
+  }
+  // Open questions are the decisions the document has not made yet. They are
+  // rendered in appendix A, but nobody reads that during a wave; surface them.
+  const questions = plan.openQuestions ?? []
+  if (questions.length > 0) {
+    out.push({
+      code: 'OPEN_QUESTIONS_PENDING',
+      count: questions.length,
+      items: questions.map((entry, index) => `${index + 1}. ${entry.slice(0, 70)}`),
     })
   }
   return out

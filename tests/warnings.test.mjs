@@ -341,3 +341,24 @@ test('BOUNDARY_UNUSED ignores runtimes and standards', () => {
   const warning = collectWarnings(plan).find((entry) => entry.code === 'BOUNDARY_UNUSED')
   assert.equal(warning, undefined)
 })
+
+test('AC_STATUS_CONTRADICTION flags a success status that disagrees with http[]', () => {
+  const plan = basePlan()
+  plan.http[0].status = 201
+  plan.modules[2].acceptance = [{ id: 'a3', assertion: 'POST /auth/login 返回 200 与 TokenPair', test: 'pnpm test' }]
+  const codes = collectWarnings(plan).map((entry) => entry.code)
+  assert.ok(codes.includes('AC_STATUS_CONTRADICTION'))
+
+  plan.modules[2].acceptance = [{ id: 'a3', assertion: 'POST /auth/login 返回 201 与 TokenPair', test: 'pnpm test' }]
+  const clean = collectWarnings(plan).map((entry) => entry.code)
+  assert.ok(!clean.includes('AC_STATUS_CONTRADICTION'))
+})
+
+test('OPEN_QUESTIONS_PENDING surfaces decisions the plan has not made yet', () => {
+  const plan = basePlan()
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'OPEN_QUESTIONS_PENDING'))
+  plan.openQuestions = ['时区用 UTC 还是本地时间？']
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'OPEN_QUESTIONS_PENDING')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /时区/)
+})
