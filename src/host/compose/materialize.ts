@@ -264,7 +264,10 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   }
   for (const module of plan.modules) {
     for (const item of module.acceptance ?? []) {
-      for (const match of item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+([^\s,，、；;）)」』"']*)/g)) {
+      // A path must start with "/": without that anchor, prose like
+      // "DELETE 成功后…" is mistaken for a route mention and the real
+      // "(DELETE /api/runs/:id)" later in the same sentence is skipped.
+      for (const match of item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s,，、；;）」』"']*)/g)) {
         const rawPath = match[2]
         if (rawPath === undefined) continue
         const path = routePath(rawPath)

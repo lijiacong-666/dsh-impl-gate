@@ -138,3 +138,33 @@ test('two modules claiming the same file is reported', () => {
   assert.equal(clash.count, 1)
   assert.match(clash.items[0], /^shared\/schema\.sql ← M1, M2$/)
 })
+
+test('a bare filename in a constraint is not a hard-coded path', () => {
+  const plan = {
+    modules: [
+      { id: 'M1', constraints: ['app.js 以 <script type="module"> 引入'], acceptance: [] },
+      { id: 'M2', constraints: ['样式写在 public/styles.css 里'], acceptance: [] },
+    ],
+    http: [],
+  }
+  const pathWarnings = collectWarnings(plan).filter((warning) => warning.code === 'CONSTRAINT_HAS_PATH')
+  assert.equal(pathWarnings.length, 1)
+  assert.match(pathWarnings[0].items[0], /public\/styles\.css/)
+})
+
+test('a route mentioned after prose is still counted as asserted', () => {
+  const plan = {
+    modules: [
+      {
+        id: 'M2',
+        constraints: [],
+        acceptance: [
+          { id: 'AC-M2-1', assertion: 'GET/PATCH/DELETE 一个不存在的 id 都返回 404；DELETE 成功后该条从列表消失（DELETE /api/runs/:id 生效）' },
+        ],
+      },
+    ],
+    http: [{ method: 'DELETE', path: '/api/runs/:id', module: 'M2', handler: 'deleteRun', auth: 'session' }],
+  }
+  const codes = collectWarnings(plan).map((warning) => warning.code)
+  assert.equal(codes.includes('HTTP_ROUTE_UNCOVERED'), false)
+})
