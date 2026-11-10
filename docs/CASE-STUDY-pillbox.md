@@ -51,6 +51,18 @@
 | `TOOLING_UNOWNED` | 第 1 轮：没有模块拥有 `package.json` |
 | `LIST_ORDER_UNDEFINED` / `HTTP_ROUTE_UNCOVERED` / `BOUNDARY_UNUSED` | 第 1 轮各 2 条，0.3.15 降噪后归零 |
 
+## 实现切片：M1 core 真的写出来了
+
+评审通过后，把 `tasks/wave-1/M1-core.md` 交给一个只读任务卡与 SPEC 的实现者（5 分 21 秒，未参与设计）：
+
+- 写出 9 个白名单文件（`core/{db,types,errors,clock,migrate-cli}.js`、`core/migrations/001_init.sql`、
+  `core/tests/core.test.js`、`package.json`、`vitest.config.js`），没有越界文件。
+- 四条验收命令全部实测通过（`core-migrate` / `core-rollback` / `core-date` / `core-text`，各 1 passed / 4 skipped 是被 `-t` 过滤的同文件用例）。
+- `impl_gate_record modules=["M1"]` → **PASS 4 / FAIL 0**，`impl_gate_check` → `PASS 10` +
+  `implementation evidence: PASS 4` + `review: round 6 … blocked 0`——设计、评审、实现、证据四段第一次在药箱上串起来。
+- 它自己拍板了 14 处文档没写的细节（`migrate` 返回值语义、`newId` 长度、`assertText` 返回值、库路径优先级、
+  嵌套事务复用、哪些列建 FK 等），全部列进了报告；这类「实现者被迫做的小决定」正是下一步要往契约里收的东西。
+
 ## 复现
 
 ```bash
