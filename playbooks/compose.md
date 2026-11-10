@@ -350,6 +350,51 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 7. **上传形态写进类型与限流归属。** JSON 内联 html 还是 multipart，要落到 `http[].req` 的类型，并写明哪个模块负责 `bodyLimit`。→ 形态不写清，实现者会同时写两套解析，限流也无人认领。
 8. **标签语义写进签名或类型。** 追加还是替换、`updated_by` 有没有列，必须可判定（写进签名参数、类型字段或 `constraints`）。→ “打标签”在实现层至少有四种互不兼容的行为。
 
+## materialize 的 warnings 怎么读
+
+materialize 返回值末尾的 `warning CODE (n): …` 是**自检清单**，不是失败。目标不是清零，而是「剩下的每一条你都能解释」。按性质分四类：
+
+**A. 契约没闭合（改 plan）**
+
+| 警告 | 说明 | 改法 |
+|---|---|---|
+| `COVERAGE_GAP` | 某个 goal 没有任何 AC 的 `covers` | 给能验证它的 AC 加 `covers: ["G3"]` |
+| `ERROR_OWNER_MISSING` | 错误码没有 `by` | 补 `by: "M4"` |
+| `ERROR_UNUSED` | 声明了但从没被约束/AC/flow 引用 | 删掉，或补上会抛它的地方 |
+| `AUTH_UNSPECIFIED` | 路由没写 `auth` | 写 `public`/`session`/`admin` |
+| `TYPE_OWNER_MISSING` | 跨模块共用却无 `owner` | 指定由哪个模块定义导出 |
+| `TYPE_OWNER_NO_SOURCE` | 有 owner，但该模块白名单里没有源码文件 | 给 owner 加一个 `.ts`/`.js` 文件 |
+| `FILE_OWNERSHIP_OVERLAP` | 两个模块声称写同一个文件 | 二选一，或改成不同文件 |
+| `TOOLING_UNOWNED` | 有验收命令，但没有模块拥有 `package.json` | 把清单文件写进某个模块的 `files` |
+| `AC_TEST_UNRUNNABLE` | AC 命令首词不在白名单（或没写命令） | 换成 `npx vitest run …` 这类可执行命令 |
+| `AC_HTTP_OUTSIDE_SHELL` | 模块自己没有路由，却在 AC 里断言 HTTP | 改成单元级断言，或给模块加路由 |
+| `AC_STATUS_CONTRADICTION` | AC 写「返回 201」，`http[]` 声明 200 | 统一一处：通常给 POST 补 `status: 201` |
+
+**B. 决定没做（改 plan 或写进 openQuestions）**
+
+| 警告 | 说明 |
+|---|---|
+| `STATUS_DEFAULTED` | 写路由没写 `status`，只能按 200 兜底 |
+| `LIST_ORDER_UNDEFINED` | 返回列表却没写排序口径 |
+| `PATCH_NULLABLE_AMBIGUOUS` | PATCH 请求全可空，分不清「没传」与「置空」 |
+| `OPEN_QUESTIONS_PENDING` | `openQuestions` 还有未决项——开工前必须拍板 |
+| `WRITE_NO_VALIDATION_ERROR` | 整份 plan 一个 400/422 都没有 |
+| `BOUNDARY_UNUSED` | 声明了外部依赖，但技术栈与模块里再没出现 |
+| `IN_MEMORY_VS_TABLE` | 表声明某模块负责写，该模块却说「内存里存」 |
+
+**C. 可能误报（确认后可留）**
+
+| 警告 | 什么时候可以留 |
+|---|---|
+| `HTTP_ROUTE_UNCOVERED` | 路由只在 flows/ui 里被调用、确实不需要单独 AC |
+| `AC_AUTH_UNSTATED` | AC 是单元级，鉴权在壳模块的 smoke 里统一测 |
+| `AC_SHELL_LATER` | 模块自己拥有该路由、测试里自挂 app |
+| `CONSTRAINT_HAS_PATH` | 路径其实是路由（`/api/runs`），不是源码文件 |
+
+**D. 语义留白（机器查不出，评审会上问）**
+
+`openQuestions` 之外还有一类：同一件事在 plan 里写了两遍、写法不同（如 §4.2 类型字段与 `data[].columns` 对不上、`ui[].shows` 提到的字段在任何类型里都不存在）。这类只有照着写一遍才会暴露——所以第 3.5 步的独立评审不能省。
+
 ## 怎么分发
 
 1. 打开 `tasks/TASKS.md`，按波次推进；**同波次可并行，每波全部 PASS 再进下一波**。
