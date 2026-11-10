@@ -39,6 +39,7 @@ export interface ComposeWarning {
     | 'AC_SHELL_LATER'
     | 'STATUS_DEFAULTED'
     | 'LIST_ORDER_UNDEFINED'
+    | 'LIST_PAGINATION_UNDECLARED'
     | 'PATCH_NULLABLE_AMBIGUOUS'
     | 'BOUNDARY_UNUSED'
     | 'WRITE_NO_VALIDATION_ERROR'
@@ -246,6 +247,22 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .filter((entry) => !hasOrderNote(entry.module, entry.res))
     .map((entry) => `${entry.method} ${entry.path} → ${entry.res ?? ''}`)
   if (unordered.length > 0) out.push({ code: 'LIST_ORDER_UNDEFINED', count: unordered.length, items: unordered })
+
+  // A response that carries pagination bookkeeping (total / hasMore / nextCursor) but
+  // whose route declares no page/limit/cursor parameter: the implementer must invent
+  // the contract, and "total" silently means "however many rows there are".
+  const PAGE_FIELDS = /^(total|totalCount|hasMore|nextCursor|pageSize)$/i
+  const PAGE_PARAMS = /^(page|pageSize|perPage|limit|offset|cursor|after|before)$/i
+  const unpaginated = (plan.http ?? [])
+    .filter((entry) => {
+      const declared = (plan.types ?? []).find((type) => type.name === entry.res)
+      if (declared === undefined || declared.kind !== 'object') return false
+      const fields = declared.fields ?? []
+      if (!fields.some((field) => PAGE_FIELDS.test(field.name))) return false
+      return !(entry.query ?? []).some((param) => PAGE_PARAMS.test(param.name))
+    })
+    .map((entry) => `${entry.method} ${entry.path} returns ${entry.res ?? ''} with pagination fields but declares no page/limit/cursor query`)
+  if (unpaginated.length > 0) out.push({ code: 'LIST_PAGINATION_UNDECLARED', count: unpaginated.length, items: unpaginated })
 
   // A PATCH request type whose every field is nullable cannot express "leave it
   // alone" versus "set it to null": the implementer has to guess.

@@ -388,3 +388,15 @@ test('CONSTRAINT_FIELD_UNKNOWN flags a field the prose invented but the type lac
   query.fields.push({ name: 'medicineId', type: 'string | null' })
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'CONSTRAINT_FIELD_UNKNOWN'))
 })
+test('LIST_PAGINATION_UNDECLARED flags totals without page/cursor parameters', () => {
+  const plan = basePlan()
+  plan.types.push({ name: 'UserList', kind: 'object', fields: [{ name: 'items', type: 'User[]' }, { name: 'total', type: 'number' }] })
+  plan.modules[2].exposes.push({ kind: 'http', signature: 'listUsers(): Promise<UserList>' })
+  plan.http.push({ method: 'GET', path: '/users', module: 'M3', handler: 'listUsers', res: 'UserList', auth: 'session' })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'LIST_PAGINATION_UNDECLARED')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /GET \/users returns UserList/)
+
+  plan.http[1].query = [{ name: 'page', type: 'number' }]
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'LIST_PAGINATION_UNDECLARED'))
+})
