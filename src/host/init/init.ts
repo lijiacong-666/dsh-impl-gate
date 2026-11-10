@@ -120,8 +120,10 @@ export function initTasks(outDirRaw: string, options: InitOptions = {}): InitPay
   rendered.set('cards.json', `${JSON.stringify(buildCardsJson(plan, waves, overlaps, cards), null, 2)}\n`)
 
   const expected = new Set([...rendered.keys()].map((entry) => entry.split('/').join(path.sep)))
+  // EVIDENCE.md is written by impl_gate_record into tasks/; it is ours, not a foreign file.
+  const ours = new Set(['EVIDENCE.md'])
   const existing = listFiles(tasksDir)
-  const unknown = existing.filter((entry) => !expected.has(entry))
+  const unknown = existing.filter((entry) => !expected.has(entry) && !ours.has(entry))
   if (unknown.length > 0) {
     return failure(
       'EXPORT_REFUSED',
