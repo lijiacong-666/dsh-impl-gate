@@ -227,13 +227,22 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     // itself (items/rows/...), not when it merely carries a nested collection.
     return arrays.length === fields.length || arrays.some((field) => /^(items|rows|list|results|data|entries)$/i.test(field.name))
   }
-  const orderWords = (text: string): boolean => /排序|order\s*by|sort(ed)?\s*by|orderBy|sortBy/i.test(text)
-  const hasOrderNote = (moduleId: string): boolean =>
-    (plan.modules ?? []).some((module) => module.id === moduleId && (module.constraints ?? []).some(orderWords))
+  const orderWords = (text: string): boolean =>
+    /排序|升序|降序|order\s*by|sort(ed)?\s*by|orderBy|sortBy/i.test(text)
+  // 排序约定常常写在“产出方”模块（例如 M7 的 weeklyAdherence 返回 AdherenceReport），
+  // 而不是路由所属的壳模块，所以两边都要看。
+  const hasOrderNote = (routeModule: string, res: string | undefined): boolean => {
+    const name = res ?? ''
+    return (plan.modules ?? []).some((module) => {
+      if (!(module.constraints ?? []).some(orderWords)) return false
+      if (module.id === routeModule) return true
+      return (module.exposes ?? []).some((expose) => name !== '' && expose.signature.includes(`: ${name}`))
+    })
+  }
   const unordered = (plan.http ?? [])
     .filter((entry) => collection(entry.res))
     .filter((entry) => !(entry.query ?? []).some((param) => /^(sort|order|orderBy|sortBy)$/i.test(param.name)))
-    .filter((entry) => !hasOrderNote(entry.module))
+    .filter((entry) => !hasOrderNote(entry.module, entry.res))
     .map((entry) => `${entry.method} ${entry.path} → ${entry.res ?? ''}`)
   if (unordered.length > 0) out.push({ code: 'LIST_ORDER_UNDEFINED', count: unordered.length, items: unordered })
 
@@ -303,6 +312,9 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .map((boundary) => boundary.dependency)
     .filter((dependency) => typeof dependency === 'string' && dependency !== '')
     .filter((dependency) => !RUNTIME_LIKE.test(dependency.trim()) && !/浏览器|文件系统|fetch/i.test(dependency))
+    // 环境类边界（本机目录、离线运行、单机部署）不是“可被引用的外部依赖”，
+    // 它们只约束部署方式，出现与否都不该被当成“声明了却没实现”。
+    .filter((dependency) => !/(目录|环境|离线|本机|单机|时区|本地数据|用户数据)/.test(dependency))
     .filter((dependency) => !corpus.includes(dependency.toLowerCase()))
   // eslint-disable-next-line no-control-regex
   if (unusedBoundary.length > 0) {
@@ -472,7 +484,11 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   for (const page of plan.ui ?? []) {
     for (const call of page.calls ?? []) touched.add(routeKey(call))
   }
+  // 静态资源（脚本、样式、图标）天然不会有业务 AC，也不会进 flows/pages 的 calls：
+  // 它们的验收是“页面能加载”，不是逐条路由断言。
+  const isStaticAsset = (routePath: string): boolean => /\.(?:js|mjs|css|html|png|svg|ico|woff2?|ttf|map)$/i.test(routePath)
   const uncovered = routes
+    .filter((route) => !isStaticAsset(route.path))
     .filter((route) => !asserted.has(`${route.method} ${route.path}`))
     .filter((route) => !touched.has(`${route.method} ${route.path}`))
     .map((route) => `${route.method} ${route.path}`)

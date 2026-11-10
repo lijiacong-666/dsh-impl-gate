@@ -16,6 +16,7 @@ const SECTIONS = [
   '怎么判断 SPEC.md 够不够',
   '高频自相矛盾清单',
   '自洽性',
+  'materialize 的 warnings 怎么读',
   '怎么分发',
   '怎么回收',
   '怎么回填实现证据',
