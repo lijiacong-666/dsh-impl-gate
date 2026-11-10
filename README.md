@@ -135,6 +135,8 @@ impl_gate_review({
 - 三态：`ready`（能直接开工）、`clarify`（开工会上问一句就能开工）、`blocked`（照文档写不出来）。
 - 过线标准是 **`blocked == 0 且 blocking == 0`**，不是「比例好看」；同一份文档换评审者分数会差很多，比例不可复现。
 - 每轮写一行到 `.impl-gate/review.json`，按 `round` 递增、同轮拒绝覆盖；换评审者/换轮次都留痕。
+- 每轮同时记下 `compose-plan.json` 与 `SPEC.md` 的 sha256（0.3.5），下一轮 sha 变了才说明评审的是新版；返回值还带 `blocking vs 上一轮` 的增减。
+- 每条 verdict 可带 `evidence: "SPEC.md:<行号>"`（0.3.5），把结论钉到原文；指不到行号等于没查。
 - 评审只写证据，不改 `SPEC.md`、plan 或图谱；要改的是 plan，改完重跑 materialize，再评下一轮。
 
 ### `impl_gate_compose` 的输出结构

@@ -5,6 +5,7 @@
 // `{ schemaVersion: 1, rounds: [{ round, reviewer, at, verdicts, summary }] }`.
 // Nothing here writes SPEC.md or the graph; a review is evidence, not content.
 
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -17,6 +18,8 @@ export interface ReviewVerdict {
   status: ReviewStatus
   note?: string
   blocking?: string[]
+  /** Where in SPEC.md the reason for this verdict can be read, e.g. "SPEC.md:412". */
+  evidence?: string
 }
 
 export interface ReviewPayload {
@@ -28,6 +31,10 @@ export interface ReviewPayload {
   blocked: number
   blocking: number
   total: number
+  planSha256: string
+  specSha256?: string
+  /** blocking count of the previous round minus this round; undefined for the first round. */
+  blockingDelta?: number
 }
 
 export interface ReviewFailure {
@@ -49,6 +56,10 @@ interface StoredRound {
   at: string
   verdicts: ReviewVerdict[]
   summary: { ready: number; clarify: number; blocked: number; blocking: number }
+  /** sha256 of compose-plan.json when this round was recorded. */
+  planSha256?: string
+  /** sha256 of SPEC.md when this round was recorded (absent if SPEC.md was not materialized). */
+  specSha256?: string
 }
 
 interface StoredFile {
@@ -98,6 +109,15 @@ function readStored(reviewPath: string): StoredFile {
 }
 
 const STATUSES = new Set<ReviewStatus>(['ready', 'clarify', 'blocked'])
+const EVIDENCE_RE = /^SPEC\.md:[1-9][0-9]*$/
+
+function hashOf(file: string): string | undefined {
+  try {
+    return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+  } catch {
+    return undefined
+  }
+}
 
 /** Appends one review round; never rewrites earlier rounds. */
 export function recordReview(outDirRaw: string, input: ReviewInput): ReviewOutcome {
@@ -129,10 +149,19 @@ export function recordReview(outDirRaw: string, input: ReviewInput): ReviewOutco
     if (!STATUSES.has(verdict.status)) {
       return failure('REVIEW_INVALID', `verdict ${index} status must be ready, clarify or blocked`)
     }
+    if (verdict.evidence !== undefined && !EVIDENCE_RE.test(verdict.evidence.trim())) {
+      return failure(
+        'REVIEW_INVALID',
+        `verdict ${index} evidence must look like "SPEC.md:<line>" (got "${verdict.evidence}")`,
+      )
+    }
   }
 
   const reviewPath = path.join(outDir, REVIEW_REL)
   const stored = readStored(reviewPath)
+  const planSha256 = hashOf(path.join(outDir, 'compose-plan.json')) ?? ''
+  if (planSha256 === '') return failure('PLAN_INVALID', 'compose-plan.json could not be read for hashing')
+  const specSha256 = hashOf(path.join(outDir, 'SPEC.md'))
   const nextRound = input.round ?? stored.rounds.length + 1
   if (stored.rounds.some((entry) => entry.round === nextRound)) {
     return failure('REVIEW_ROUND_EXISTS', `round ${nextRound} already recorded; pass a new round number`)
@@ -149,11 +178,14 @@ export function recordReview(outDirRaw: string, input: ReviewInput): ReviewOutco
     round: nextRound,
     reviewer,
     at: new Date().toISOString(),
+    planSha256,
+    ...(specSha256 === undefined ? {} : { specSha256 }),
     verdicts: verdicts.map((entry) => ({
       module: entry.module.trim(),
       status: entry.status,
       ...(entry.note === undefined ? {} : { note: entry.note }),
       ...(entry.blocking === undefined ? {} : { blocking: entry.blocking }),
+      ...(entry.evidence === undefined ? {} : { evidence: entry.evidence.trim() }),
     })),
     summary,
   })
@@ -166,11 +198,17 @@ export function recordReview(outDirRaw: string, input: ReviewInput): ReviewOutco
     return failure('REVIEW_WRITE_FAILED', `could not write ${reviewPath}: ${(error as Error).message}`)
   }
 
+  const previous = stored.rounds.filter((entry) => entry.round < nextRound).at(-1)
+  const previousBlocking = previous?.summary.blocking
+
   return {
     ok: true,
     reviewPath,
     round: nextRound,
     total: plan.modules.length,
+    planSha256,
+    ...(specSha256 === undefined ? {} : { specSha256 }),
+    ...(previousBlocking === undefined ? {} : { blockingDelta: previousBlocking - summary.blocking }),
     ...summary,
   }
 }

@@ -1164,6 +1164,7 @@ const reviewParameters = {
           status: { type: 'string', enum: ['ready', 'clarify', 'blocked'] },
           note: { type: 'string', description: '一句话理由。' },
           blocking: { type: 'array', items: { type: 'string' }, description: 'blocked 时必须给出具体缺口。' },
+          evidence: { type: 'string', description: '理由在 SPEC.md 的位置，形如 "SPEC.md:412"。' },
         },
         required: ['module', 'status'],
       },
@@ -1184,6 +1185,9 @@ const reviewOutputSchema = {
     blocked: { type: 'number' },
     blocking: { type: 'number' },
     total: { type: 'number' },
+    planSha256: { type: 'string' },
+    specSha256: { type: 'string' },
+    blockingDelta: { type: 'number' },
     error: {
       type: 'object',
       additionalProperties: false,
@@ -1205,6 +1209,15 @@ function renderReview(_args: unknown, value: unknown): Array<{ type: 'text'; tex
     `verdicts: ready ${payload.ready ?? 0} / clarify ${payload.clarify ?? 0} / blocked ${payload.blocked ?? 0} (of ${payload.total ?? 0} modules)`,
     `blocking items: ${payload.blocking ?? 0}`,
   ]
+  const planSha = (payload.planSha256 ?? '').slice(0, 12)
+  const specSha = (payload.specSha256 ?? '').slice(0, 12)
+  if (planSha !== '') {
+    lines.push(`plan sha256: ${planSha}${specSha === '' ? '（SPEC.md 尚未物化）' : ` / spec sha256: ${specSha}`}`)
+  }
+  if (payload.blockingDelta !== undefined) {
+    const verb = payload.blockingDelta > 0 ? '减少' : payload.blockingDelta < 0 ? '增加' : '不变'
+    lines.push(`blocking vs 上一轮: ${verb} ${Math.abs(payload.blockingDelta)}`)
+  }
   if ((payload.blocked ?? 0) > 0 || (payload.blocking ?? 0) > 0) {
     lines.push('这条评审未过线：blocked 或 blocking>0 时先改 plan 再重跑 materialize，不要开始实现。')
   } else {
@@ -1217,7 +1230,10 @@ const review = {
   name: 'impl_gate_review',
   description:
     'Record one review round of a generated SPEC.md into <outDir>/.impl-gate/review.json. ' +
-    'A reviewer (human or another agent) marks every module ready / clarify / blocked with reasons. ' +
+    'A reviewer (human or another agent) marks every module ready / clarify / blocked with reasons, ' +
+    'optionally citing where the reason can be read ("SPEC.md:<line>"). ' +
+    'Each round also records the sha256 of compose-plan.json and SPEC.md, so later rounds can be proven to judge ' +
+    'the same document, and reports how blocking moved versus the previous round. ' +
     'It appends rounds and never edits the plan, SPEC.md or the graph; use it before impl_gate_init so the ' +
     '"can we start?" judgement is evidence instead of chat history. The pass line is blocking = 0.',
   parameters: reviewParameters,

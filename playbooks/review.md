@@ -47,6 +47,16 @@
 
 通过线：**blocking = 0**。可分发的唯一硬条件是每个模块都没有 blocking；「可开工 ≥80%」降为参考指标——它用来判断文档整体成熟度，继续追 100% 会把评审变成无限循环，且 ask 本来就该留给开工会议。低于参考线但 blocking 已清零，可以分发，把 ask 清单带进开工会议。
 
+## 怎么留痕
+
+判定完调 `impl_gate_review({ outDir, reviewer, verdicts })`，它会追加一轮到 `<outDir>/.impl-gate/review.json`，并做三件事：
+
+- 记下当时 `compose-plan.json` 与 `SPEC.md` 的 sha256——下一轮 sha 变了，说明评审的确实是新版；没变却「修好了」，说明改的不是文档。
+- 报 `blocking vs 上一轮: 减少 N`，用来看返修是不是真在收敛。
+- 每条 verdict 可带 `evidence: "SPEC.md:<行号>"`，把「凭什么这么判」钉到原文；指不到行号的结论等于没查。
+
+`blocked` 不给 `blocking` 列表会被拒；同一 `round` 重复提交也会被拒（评审记录只追加）。
+
 ## 五类必查
 
 逐模块过这五类，每条都要能指到 SPEC.md 的具体小节或原句；指不到就等于没查。
