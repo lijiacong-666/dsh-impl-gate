@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -100,7 +100,7 @@ test('unmatched requires.item reports PLAN_INVALID with a JSON pointer', () => {
   assert.match(found.message, /createUserX/)
 })
 
-test('materialize refuses unregistered files before spawning specgraph', async () => {
+test('materialize leaves files it does not own alone (implementation code lives there)', async () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-conflict-'))
   try {
     fs.writeFileSync(path.join(out, 'compose-plan.json'), JSON.stringify(basePlan()))
@@ -113,9 +113,29 @@ test('materialize refuses unregistered files before spawning specgraph', async (
       timeoutMs: 1000,
     })
     assert.equal(result.ok, false)
-    assert.equal(result.code, 'EXPORT_REFUSED')
-    assert.match(result.message, /demo-app\/stray\.txt/)
+    assert.notEqual(result.code, 'EXPORT_REFUSED')
     assert.equal(fs.readFileSync(path.join(out, 'demo-app', 'stray.txt'), 'utf8'), 'keep me')
+  } finally {
+    fs.rmSync(out, { recursive: true, force: true })
+  }
+})
+
+test('materialize refuses to overwrite a generated file it does not own', async () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-conflict-'))
+  try {
+    fs.writeFileSync(path.join(out, 'compose-plan.json'), JSON.stringify(basePlan()))
+    fs.mkdirSync(path.join(out, 'demo-app', 'shared'), { recursive: true })
+    fs.writeFileSync(path.join(out, 'demo-app', 'shared', 'spec.md'), '# hand written, not impl-gate')
+    const result = await materializePlan(out, {
+      specgraphCommand: 'python -m specgraph',
+      pythonPath: 'definitely-not-a-real-python',
+      specgraphCwd: '',
+      timeoutMs: 1000,
+    })
+    assert.equal(result.ok, false)
+    assert.equal(result.code, 'EXPORT_REFUSED')
+    assert.match(result.message, /demo-app\/shared\/spec\.md/)
+    assert.equal(fs.readFileSync(path.join(out, 'demo-app', 'shared', 'spec.md'), 'utf8'), '# hand written, not impl-gate')
   } finally {
     fs.rmSync(out, { recursive: true, force: true })
   }

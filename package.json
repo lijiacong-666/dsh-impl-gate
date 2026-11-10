@@ -1,6 +1,6 @@
 {
   "name": "dsh-impl-gate",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Local implementation gate that turns 32 IMPL-GATE assertions into callable DSH tools for DeepSeek Harness.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",

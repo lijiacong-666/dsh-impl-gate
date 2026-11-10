@@ -610,31 +610,9 @@ export async function materializePlan(
   const previousOwnership = await readOwnershipRecord(outDir)
   const registered = new Set(previousOwnership?.generated ?? [])
 
-  // Idempotency: only files registered in ownership.json may be replaced.
-  const existing: string[] = []
-  for (const root of [target, exportDir]) {
-    for (const file of await listFiles(root)) existing.push(toPosix(path.relative(outDir, file)))
-  }
-  if (await fs.promises.stat(specFile).then((stat) => stat.isFile()).catch(() => false)) {
-    existing.push('SPEC.md')
-  }
-  const conflicts = existing.filter((file) => !registered.has(file) && !isRunRecord(file)).sort()
-  if (conflicts.length > 0) {
-    return failure(
-      'EXPORT_REFUSED',
-      `target contains files not written by impl-gate: ${conflicts.join(', ')}`,
-      `delete them or move them away; generated: ${[...registered].sort().join(', ') || '(none)'}`,
-    )
-  }
-
-  // Resolve and prove the python environment before writing anything, so a
-  // missing specgraph package leaves outDir exactly as it was.
-  const environment = buildEnv(config, outDir)
-  try {
-    await preflightSpecgraph(environment, config.timeoutMs)
-  } catch (error) {
-    return fromError(error)
-  }
+  // Implementation files may already live in the project when the plan changes;
+  // they are not ours to police. Only a file we are about to write must be
+  // unregistered to count as a conflict (checked right before writing).
 
   // SPEC.md must live OUTSIDE the graph root: spec-graph treats any spec.md in
   // the root (case-insensitively on Windows) as the root node and rejects the
@@ -648,6 +626,29 @@ export async function materializePlan(
   files.set('SPEC.md', specText)
 
   const generated = [...files.keys()]
+  const conflicts: string[] = []
+  for (const rel of generated) {
+    const full = path.join(outDir, rel)
+    const exists = await fs.promises.stat(full).then((stat) => stat.isFile()).catch(() => false)
+    if (exists && !registered.has(rel) && !isRunRecord(rel)) conflicts.push(rel)
+  }
+  if (conflicts.length > 0) {
+    return failure(
+      'EXPORT_REFUSED',
+      `refusing to overwrite files impl-gate does not own: ${conflicts.sort().join(', ')}`,
+      `move them away and retry; owned from the previous run: ${[...registered].sort().join(', ') || '(none)'}`,
+    )
+  }
+
+  // Resolve and prove the python environment before writing anything, so a
+  // missing specgraph package leaves outDir exactly as it was. The conflict
+  // check above runs first so it does not depend on the interpreter.
+  const environment = buildEnv(config, outDir)
+  try {
+    await preflightSpecgraph(environment, config.timeoutMs)
+  } catch (error) {
+    return fromError(error)
+  }
   for (const [rel, body] of files) {
     const full = path.join(outDir, rel)
     await fs.promises.mkdir(path.dirname(full), { recursive: true })
