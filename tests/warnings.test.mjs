@@ -362,3 +362,14 @@ test('OPEN_QUESTIONS_PENDING surfaces decisions the plan has not made yet', () =
   assert.equal(warning?.count, 1)
   assert.match(warning?.items[0] ?? '', /时区/)
 })
+test('AC_TEST_UNRUNNABLE flags acceptance rows record cannot execute', () => {
+  const plan = basePlan()
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'AC_TEST_UNRUNNABLE'))
+
+  plan.modules[0].acceptance = [{ id: 'a1', assertion: '手工核对列表', test: '人工检查' }]
+  plan.modules[1].acceptance = [{ id: 'a2', assertion: '密码错抛错', test: '' }]
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'AC_TEST_UNRUNNABLE')
+  assert.equal(warning?.count, 2)
+  assert.match(warning?.items.join(' | ') ?? '', /人工检查/)
+  assert.match(warning?.items.join(' | ') ?? '', /no command/)
+})

@@ -14,7 +14,7 @@ export const AC_EVIDENCE_REL = '.impl-gate/ac-evidence.json'
 export const TASKS_EVIDENCE_REL = 'tasks/EVIDENCE.md'
 
 /** Commands are authored by the planning model, so only well-known runners run. */
-const ALLOWED_RUNNERS = new Set([
+export const ALLOWED_RUNNERS = new Set([
   'pnpm',
   'npm',
   'npx',

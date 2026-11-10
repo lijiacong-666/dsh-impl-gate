@@ -22,6 +22,7 @@ import { loadChecks } from '../checks.js'
 import { CHECKLIST_REL, mergeChecklist, specLineFor } from './checklist-template.js'
 import { MAPPING_REL, renderMappingTemplate } from './mapping-template.js'
 import { initTasks } from '../init/init.js'
+import { ALLOWED_RUNNERS, runnerOf } from '../record/record.js'
 
 export interface ComposeWarning {
   code:
@@ -46,6 +47,7 @@ export interface ComposeWarning {
     | 'TOOLING_UNOWNED'
     | 'AC_STATUS_CONTRADICTION'
     | 'OPEN_QUESTIONS_PENDING'
+    | 'AC_TEST_UNRUNNABLE'
   count: number
   items: string[]
 }
@@ -546,6 +548,25 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
       items: questions.map((entry, index) => `${index + 1}. ${entry.slice(0, 70)}`),
     })
   }
+
+  // impl_gate_record only executes commands whose first word is a known runner.
+  // An AC whose "test" is prose, empty, or starts with an unknown tool produces
+  // no evidence at record time — and the implementer usually finds out last.
+  const unrun: string[] = []
+  for (const module of plan.modules) {
+    for (const item of module.acceptance ?? []) {
+      const command = (item.test ?? '').trim()
+      if (command === '') {
+        unrun.push(`${module.id}: ${item.id} has no command`)
+        continue
+      }
+      const runner = runnerOf(command)
+      if (runner === null || !ALLOWED_RUNNERS.has(runner)) {
+        unrun.push(`${module.id}: ${item.id} starts with "${command.split(/\s+/)[0] ?? ''}"`)
+      }
+    }
+  }
+  if (unrun.length > 0) out.push({ code: 'AC_TEST_UNRUNNABLE', count: unrun.length, items: unrun })
   return out
 }
 

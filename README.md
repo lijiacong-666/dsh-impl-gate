@@ -193,7 +193,7 @@ impl_gate_review({
 
 **重跑不丢证据（0.3.1）**：改 plan 后再次 `materialize` 只重写 `NOT-RUN` 行；已填 `PASS`/`FAIL` 的行连同 evidence 原样保留，旧文件先备份到 `.impl-gate/checklist.md.bak-<时间戳>`，结果里带 `checklistPreserved` 与 `checklistBackupPath`。注意 `impl_gate_check` 只看 `NOT-RUN` 与 `## 未覆盖` 是否对称——保留行不会因为 plan 改了而被判失效，这是有意的：改 plan 后请人工复核保留行的 evidence 是否仍成立。
 
-**warnings（0.3.1）**：materialize 额外返回『能生成但该被看见』的缺口，0.3.12 时共 21 类——`COVERAGE_GAP`（goal 没有 AC 的 `covers`）、`ERROR_OWNER_MISSING`（错误码缺 `by`）、`AUTH_UNSPECIFIED`（路由缺 `auth`）、`ERROR_UNUSED`（声明了没人引用的错误码）、`FILE_OWNERSHIP_OVERLAP`（两个模块的文件路径相同或只差大小写）、`CONSTRAINT_HAS_PATH`（约束里写了具体文件路径，会在 specgraph 内容规则处炸）、`AC_AUTH_UNSTATED`（需要鉴权的路由，AC 里裸调用、没提 Origin/401）、`HTTP_ROUTE_UNCOVERED`（既没有 AC 断言、也没被 `flows`/`ui` 引用的路由）、`AC_HTTP_OUTSIDE_SHELL`（模块自己没有路由，却在 AC 里断言 HTTP 调用——它所在波次里没有服务可打）。它们不拦截生成；要拦就在评审环里拦。0.3.3 起多一类 `TYPE_OWNER_MISSING`（被两个以上模块引用、却没有 `owner` 的类型）；0.3.6 起多八类「留白」警告（见下）——
+**warnings（0.3.1）**：materialize 额外返回『能生成但该被看见』的缺口，0.3.13 时共 22 类——`COVERAGE_GAP`（goal 没有 AC 的 `covers`）、`ERROR_OWNER_MISSING`（错误码缺 `by`）、`AUTH_UNSPECIFIED`（路由缺 `auth`）、`ERROR_UNUSED`（声明了没人引用的错误码）、`FILE_OWNERSHIP_OVERLAP`（两个模块的文件路径相同或只差大小写）、`CONSTRAINT_HAS_PATH`（约束里写了具体文件路径，会在 specgraph 内容规则处炸）、`AC_AUTH_UNSTATED`（需要鉴权的路由，AC 里裸调用、没提 Origin/401）、`HTTP_ROUTE_UNCOVERED`（既没有 AC 断言、也没被 `flows`/`ui` 引用的路由）、`AC_HTTP_OUTSIDE_SHELL`（模块自己没有路由，却在 AC 里断言 HTTP 调用——它所在波次里没有服务可打）。它们不拦截生成；要拦就在评审环里拦。0.3.3 起多一类 `TYPE_OWNER_MISSING`（被两个以上模块引用、却没有 `owner` 的类型）；0.3.6 起多八类「留白」警告（见下）——
 
 - `STATUS_DEFAULTED`：POST/PATCH/PUT/DELETE 没写 `status`，渲染时只能按 200 兜底（`res:"void"` 除外）；这类默认值是猜的，不是决定
 - `LIST_ORDER_UNDEFINED`：返回列表类类型（`XxxList`/`XxxPage`/数组字段就是载荷）却既没有 `query` 里的 `orderBy`/`sortBy`，模块约束里也没写排序口径
@@ -205,6 +205,7 @@ impl_gate_review({
 - `TOOLING_UNOWNED`：验收写了可执行命令，却没有任何模块拥有 `package.json`（或 `pyproject.toml`/`go.mod` 等清单）——第一个实现者只能自己发明工具链
 - `AC_STATUS_CONTRADICTION`：AC 里写「返回 201」，而同一路由在 `http[]` 声明的是 200（或反过来）——一处说成功码 201、一处按 200 兜底，实现者只能二选一
 - `OPEN_QUESTIONS_PENDING`：plan 的 `openQuestions` 还有未决项——它们会被渲染到附录 A，但开工时没人翻附录；materialize 时把条数与内容提出来，评审会上先拍板
+- `AC_TEST_UNRUNNABLE`：验收命令的首词不在 `impl_gate_record` 的白名单里（或干脆没写命令）——它跑起来会成为一条 `RUNNER_NOT_ALLOWED` 的 SKIPPED，等于没有证据；常见写法是 `npx vitest run …` 而不是 `人工核对`
 
 （`AC_SHELL_LATER` 0.3.8 起只报「调用了别的模块的路由」；模块自己拥有那条路由时，测试可以自己挂 app，不再误报。）
 
