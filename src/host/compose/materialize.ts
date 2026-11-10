@@ -407,7 +407,27 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (unstated.length > 0) out.push({ code: 'AC_AUTH_UNSTATED', count: unstated.length, items: unstated })
-  const uncovered = routes.filter((route) => !asserted.has(`${route.method} ${route.path}`)).map((route) => `${route.method} ${route.path}`)
+  // 路由被 flows 的步骤调用、或被页面的 calls 引用，也算“有人走过”：
+  // 设计文档里 AC 是单元级的时候，路由本来就不会出现在 AC 里。
+  const routeKey = (text: string): string => {
+    const parts = text.trim().replace(/\s+/g, ' ').split(' ')
+    if (parts.length < 2) return text.trim()
+    return `${parts[0]?.toUpperCase() ?? ''} ${parts.slice(1).join(' ')}`
+  }
+  const touched = new Set<string>()
+  for (const flow of plan.flows ?? []) {
+    for (const step of flow.steps ?? []) {
+      const route = (plan.http ?? []).find((entry) => entry.module === step.module && entry.handler === step.action)
+      if (route !== undefined) touched.add(`${route.method} ${route.path}`)
+    }
+  }
+  for (const page of plan.ui ?? []) {
+    for (const call of page.calls ?? []) touched.add(routeKey(call))
+  }
+  const uncovered = routes
+    .filter((route) => !asserted.has(`${route.method} ${route.path}`))
+    .filter((route) => !touched.has(`${route.method} ${route.path}`))
+    .map((route) => `${route.method} ${route.path}`)
   if (uncovered.length > 0) out.push({ code: 'HTTP_ROUTE_UNCOVERED', count: uncovered.length, items: uncovered })
 
   // A module with no route of its own cannot pass an HTTP-level assertion: the

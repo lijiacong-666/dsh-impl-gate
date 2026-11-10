@@ -267,3 +267,17 @@ test('IN_MEMORY_VS_TABLE flags a table writer whose prose says in-memory', () =>
   assert.ok(warning)
   assert.ok(warning.items.some((item) => item.endsWith('← M1')))
 })
+test('HTTP_ROUTE_UNCOVERED is silenced when a flow step calls the route', () => {
+  const plan = basePlan()
+  for (const module of plan.modules) {
+    module.acceptance = (module.acceptance ?? []).map((item) => ({ ...item, assertion: '单元级断言，不涉及路由' }))
+  }
+  plan.flows = []
+  const before = collectWarnings(plan).find((entry) => entry.code === 'HTTP_ROUTE_UNCOVERED')
+  assert.ok(before, 'precondition: route starts uncovered')
+  plan.flows = [
+    { id: 'F1', name: '登录', trigger: '用户提交', success: '拿到 token', steps: [{ module: 'M3', action: 'login' }] },
+  ]
+  const after = collectWarnings(plan).find((entry) => entry.code === 'HTTP_ROUTE_UNCOVERED')
+  assert.equal(after, undefined)
+})
