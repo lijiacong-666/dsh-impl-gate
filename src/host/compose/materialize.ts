@@ -41,6 +41,7 @@ export interface ComposeWarning {
     | 'LIST_ORDER_UNDEFINED'
     | 'LIST_PAGINATION_UNDECLARED'
     | 'PAGINATION_MODE_CONFLICT'
+    | 'QUERY_PARAM_UNMAPPED'
     | 'PATCH_NULLABLE_AMBIGUOUS'
     | 'BOUNDARY_UNUSED'
     | 'WRITE_NO_VALIDATION_ERROR'
@@ -279,6 +280,35 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
       return `${entry.method} ${entry.path} mixes offset and cursor pagination (${names})`
     })
   if (mixedPaging.length > 0) out.push({ code: 'PAGINATION_MODE_CONFLICT', count: mixedPaging.length, items: mixedPaging })
+
+  // A query parameter the handler's own parameter type cannot carry: the contract
+  // lists `page`, the handler signature takes `MedicineQuery`, and that type has no
+  // `page` field — the implementer has to invent a channel (this is exactly the bug
+  // two separate review rounds caught by hand).
+  const typeIndex = new Map((plan.types ?? []).map((type) => [type.name, type]))
+  const paramTypes = (signature: string): string[] => {
+    const open = signature.indexOf('(')
+    const close = signature.lastIndexOf(')')
+    if (open < 0 || close <= open) return []
+    return [...signature.slice(open + 1, close).matchAll(/:\s*([A-Z][A-Za-z0-9_]*)/g)].map((match) => match[1] ?? '')
+  }
+  const unmapped: string[] = []
+  for (const entry of plan.http ?? []) {
+    const names = (entry.query ?? []).map((param) => param.name)
+    const handler = (entry.handler ?? '').trim()
+    if (names.length === 0 || handler === '') continue
+    const signatures = (plan.modules ?? [])
+      .flatMap((module) => (module.exposes ?? []).map((expose) => expose.signature.trim()))
+      .filter((signature) => signature.startsWith(`${handler}(`))
+    const carriers = [...new Set(signatures.flatMap(paramTypes))].filter((name) => typeIndex.get(name)?.kind === 'object')
+    if (carriers.length === 0) continue
+    const known = new Set(carriers.flatMap((name) => (typeIndex.get(name)?.fields ?? []).map((field) => field.name)))
+    const missing = names.filter((name) => !known.has(name))
+    if (missing.length > 0) {
+      unmapped.push(`${entry.method} ${entry.path} declares ${missing.join(', ')} but ${carriers.join('/')} has no such field`)
+    }
+  }
+  if (unmapped.length > 0) out.push({ code: 'QUERY_PARAM_UNMAPPED', count: unmapped.length, items: unmapped })
 
   // A PATCH request type whose every field is nullable cannot express "leave it
   // alone" versus "set it to null": the implementer has to guess.

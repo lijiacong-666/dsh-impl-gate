@@ -413,3 +413,17 @@ test('PAGINATION_MODE_CONFLICT flags page and cursor declared together', () => {
   assert.equal(warning?.count, 1)
   assert.match(warning?.items[0] ?? '', /mixes offset and cursor pagination/)
 })
+
+test('QUERY_PARAM_UNMAPPED flags a query parameter the handler type cannot carry', () => {
+  const plan = basePlan()
+  plan.types.push({ name: 'UserQuery', kind: 'object', fields: [{ name: 'q', type: 'string' }] })
+  plan.modules[2].exposes.push({ kind: 'http', signature: 'listUsers(query: UserQuery): Promise<UserList>' })
+  plan.types.push({ name: 'UserList', kind: 'object', fields: [{ name: 'items', type: 'User[]' }] })
+  plan.http.push({ method: 'GET', path: '/users', module: 'M3', handler: 'listUsers', res: 'UserList', auth: 'session', query: [{ name: 'q', type: 'string' }] })
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'QUERY_PARAM_UNMAPPED'))
+
+  plan.http[1].query.push({ name: 'page', type: 'number' })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'QUERY_PARAM_UNMAPPED')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /declares page but UserQuery has no such field/)
+})
