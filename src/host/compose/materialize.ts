@@ -41,6 +41,7 @@ export interface ComposeWarning {
     | 'PATCH_NULLABLE_AMBIGUOUS'
     | 'BOUNDARY_UNUSED'
     | 'WRITE_NO_VALIDATION_ERROR'
+    | 'TYPE_OWNER_NO_SOURCE'
   count: number
   items: string[]
 }
@@ -310,6 +311,22 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .map((entry) => `${entry.method} ${entry.path} → ${entry.req ?? ''}`)
   if (noValidation.length > 0) {
     out.push({ code: 'WRITE_NO_VALIDATION_ERROR', count: noValidation.length, items: noValidation })
+  }
+
+  // 类型写了归属模块，但该模块的白名单里没有一个源码文件：实现者没有地方“定义并导出”它，
+  // 只能写 JSDoc 或者干脆各写一份。
+  const SOURCE_FILE = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|java|rs|cs|kt|swift|php|rb)$/i
+  const noSource = (plan.types ?? [])
+    .filter((type) => type.owner !== undefined && type.owner !== '')
+    .filter((type) => {
+      const owner = plan.modules.find((module) => module.id === type.owner)
+      if (owner === undefined) return false
+      const files = owner.files ?? []
+      return files.length > 0 && !files.some((file) => SOURCE_FILE.test(file))
+    })
+    .map((type) => `${type.name} → ${type.owner}`)
+  if (noSource.length > 0) {
+    out.push({ code: 'TYPE_OWNER_NO_SOURCE', count: noSource.length, items: noSource })
   }
 
   // Two modules claiming the same file (or paths that differ only by case) is the

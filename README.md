@@ -200,6 +200,7 @@ impl_gate_review({
 - `PATCH_NULLABLE_AMBIGUOUS`：PATCH 的请求类型每个字段都可空，实现者无法区分「没提供」与「显式置空」
 - `BOUNDARY_UNUSED`：`boundaries` 里声明了某个外部依赖，但技术栈、约束、文件与交付物里再没出现过它
 - `WRITE_NO_VALIDATION_ERROR`：POST/PATCH/PUT 带请求体，却没有哪个归属该模块的错误码是 400/422——参数错了回什么只能靠实现者猜
+- `TYPE_OWNER_NO_SOURCE`：类型写了 `owner`，但该模块的白名单里没有一个源码文件（只有 `.sql`/`.md`），实现者没地方「定义并导出」它
 
 **共享类型归属（0.3.3）**：`types[].owner` 写「哪个模块的文件定义并导出它」，渲染成类型块下的「归属：M1」。跨模块共用的类型没有 `owner` 时 materialize 会出 `TYPE_OWNER_MISSING` 警告——这正是「六个 DTO、六份各不相同的形状」的来源。
 

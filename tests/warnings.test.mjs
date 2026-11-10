@@ -252,3 +252,11 @@ test('WRITE_NO_VALIDATION_ERROR flags a write route whose module declares no 4xx
   assert.ok(warning)
   assert.ok(warning.items.some((item) => item.startsWith('POST /auth/login')))
 })
+test('TYPE_OWNER_NO_SOURCE flags an owner whose files are all non-source', () => {
+  const plan = basePlan()
+  plan.types[0] = { ...plan.types[0], owner: 'M1' }
+  plan.modules[0].files = ['users/migrations/001_users.sql']
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'TYPE_OWNER_NO_SOURCE')
+  assert.ok(warning)
+  assert.deepEqual(warning.items, ['User → M1'])
+})
