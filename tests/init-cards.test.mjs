@@ -138,6 +138,15 @@ test('a card has the nine fixed sections in order and renders （无） for empt
   assert.match(card, /## 4 你依赖的契约\n\n（无）\n\n本模块可独立开工/)
 })
 
+test('section 6 lists each AC with its plan id and acceptance command', (t) => {
+  const out = tempOut(makePlan(threeModules()))
+  t.after(() => fs.rmSync(out, { recursive: true, force: true }))
+  assert.equal(initTasks(out).ok, true)
+  const card = fs.readFileSync(path.join(out, 'tasks', 'wave-3', 'M3-auth-api.md'), 'utf8')
+  assert.match(card, /\| 编号 \| 断言 \| 验收命令 \|/)
+  assert.match(card, /\| a3 \| 能登录 \| `pnpm test auth` \|/)
+})
+
 test('section 4 resolves the provider signature from the plan', (t) => {
   const out = tempOut(makePlan(threeModules()))
   t.after(() => fs.rmSync(out, { recursive: true, force: true }))

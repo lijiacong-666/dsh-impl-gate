@@ -132,6 +132,7 @@ impl_gate_record({ outDir: "D:/proj/order-service", implRoot: "D:/code/order-ser
 - 结果写 `.impl-gate/ac-evidence.json`（结构与 `summary`/`items` 同工具输出），`tasks/EVIDENCE.md` 是人类可读版
 - 失败不中断：每条都跑，最后给 `PASS/FAIL/SKIPPED` 汇总；失败项的日志尾部直接进渲染
 - 这是「实现进度」的证据，不改变 gate 的 32 条判定，也不自动勾选 `.impl-gate/checklist.md`
+- `impl_gate_check` 会读这份文件并多打一行 `implementation evidence: PASS x / FAIL y / SKIPPED z (n AC)`；若证据是在旧 plan 上跑的，会提示重跑
 
 ### 评审留痕（0.3.1）
 

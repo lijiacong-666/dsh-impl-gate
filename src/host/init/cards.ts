@@ -136,12 +136,14 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
   if (module.acceptance.length === 0 && globalAcceptance.length === 0) {
     lines.push(NONE)
   } else {
-    lines.push('| 编号 | 断言 |', '|---|---|')
+    lines.push('| 编号 | 断言 | 验收命令 |', '|---|---|---|')
     module.acceptance.forEach((entry, index) => {
-      lines.push(`| AC-${module.id}-${index + 1} | ${entry.assertion} |`)
+      const id = entry.id === undefined || entry.id === '' ? `AC-${module.id}-${index + 1}` : entry.id
+      const command = entry.test === undefined || entry.test === '' ? '（未声明）' : `\`${entry.test}\``
+      lines.push(`| ${id} | ${entry.assertion} | ${command} |`)
     })
     globalAcceptance.forEach((entry, index) => {
-      lines.push(`| AC-G-${index + 1} | ${entry.assertion ?? ''} |`)
+      lines.push(`| AC-G-${index + 1} | ${entry.assertion ?? ''} | （全局） |`)
     })
   }
   lines.push(

@@ -51,6 +51,8 @@ export interface CheckPayload {
   durationMs: number
   /** Set when compose-plan.json no longer matches ownership.json. */
   designStale?: string
+  /** Present when impl_gate_record has run against this implRoot. */
+  implementation?: { pass: number; fail: number; skipped: number; total: number; generatedAt: string; stale: boolean }
 }
 
 const MAX_EVIDENCE = 2048
@@ -246,6 +248,37 @@ function designStaleness(implRoot: string): string | undefined {
   }
 }
 
+/**
+ * 0.3.6: impl_gate_record writes .impl-gate/ac-evidence.json next to the plan.
+ * Surface it from check so "design is fine, implementation is 12/21" is one call
+ * instead of two, and flag evidence produced against an older plan.
+ */
+function implementationEvidence(implRoot: string): { pass: number; fail: number; skipped: number; total: number; generatedAt: string; stale: boolean } | undefined {
+  const evidenceFile = path.join(implRoot, '.impl-gate', 'ac-evidence.json')
+  try {
+    if (!fs.existsSync(evidenceFile)) return undefined
+    const stored = JSON.parse(fs.readFileSync(evidenceFile, 'utf8')) as {
+      planSha256?: unknown
+      generatedAt?: unknown
+      summary?: { pass?: unknown; fail?: unknown; skipped?: unknown; total?: unknown }
+    }
+    const summary = stored.summary ?? {}
+    const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+    const planFile = path.join(implRoot, 'compose-plan.json')
+    const current = fs.existsSync(planFile) ? createHash('sha256').update(fs.readFileSync(planFile)).digest('hex') : ''
+    return {
+      pass: num(summary.pass),
+      fail: num(summary.fail),
+      skipped: num(summary.skipped),
+      total: num(summary.total),
+      generatedAt: typeof stored.generatedAt === 'string' ? stored.generatedAt : '',
+      stale: current !== '' && typeof stored.planSha256 === 'string' && stored.planSha256 !== '' && stored.planSha256 !== current,
+    }
+  } catch {
+    return undefined
+  }
+}
+
 export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckPayload | ToolFailure> {
   const startedAt = new Date()
   const startedMs = Date.now()
@@ -427,6 +460,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
   }
 
   const staleDesign = designStaleness(implRoot)
+  const implementation = implementationEvidence(implRoot)
   const payload: CheckPayload = {
     ...base,
     passed,
@@ -435,6 +469,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     evidence,
     durationMs: Date.now() - startedMs,
     ...(staleDesign === undefined ? {} : { designStale: staleDesign }),
+    ...(implementation === undefined ? {} : { implementation }),
   }
   rememberRun(runId, payload, reasons, graphRoot)
   return payload
@@ -455,6 +490,11 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
     lines.push(`graphExitCode=${payload.graphExitCode}, ${(payload.graphIssues ?? []).length} issue(s)`)
   }
   if (payload.designStale !== undefined) lines.push(`stale design: ${payload.designStale}`)
+  if (payload.implementation !== undefined) {
+    const impl = payload.implementation
+    lines.push(`implementation evidence: PASS ${impl.pass} / FAIL ${impl.fail} / SKIPPED ${impl.skipped} (${impl.total} AC) — recorded ${impl.generatedAt === '' ? 'unknown time' : impl.generatedAt}`)
+    if (impl.stale) lines.push('these AC results were produced against an older compose-plan.json; re-run impl_gate_record')
+  }
   return [{ type: 'text', text: lines.join('\n') }]
 }
 
@@ -982,6 +1022,19 @@ const checkOutputSchema = {
     startedAt: { type: 'string' },
     durationMs: { type: 'number' },
     designStale: { type: 'string' },
+    implementation: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        pass: { type: 'number' },
+        fail: { type: 'number' },
+        skipped: { type: 'number' },
+        total: { type: 'number' },
+        generatedAt: { type: 'string' },
+        stale: { type: 'boolean' },
+      },
+      required: ['pass', 'fail', 'skipped', 'total', 'generatedAt', 'stale'],
+    },
     error: errorSchema,
   },
 }
