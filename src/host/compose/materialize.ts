@@ -42,6 +42,7 @@ export interface ComposeWarning {
     | 'BOUNDARY_UNUSED'
     | 'WRITE_NO_VALIDATION_ERROR'
     | 'TYPE_OWNER_NO_SOURCE'
+    | 'IN_MEMORY_VS_TABLE'
   count: number
   items: string[]
 }
@@ -327,6 +328,22 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .map((type) => `${type.name} → ${type.owner}`)
   if (noSource.length > 0) {
     out.push({ code: 'TYPE_OWNER_NO_SOURCE', count: noSource.length, items: noSource })
+  }
+
+  // 表声明了这个模块负责写，模块自己的说明却说「内存里存着」：实现者只能二选一，
+  // 而两边都是文档说的。这类矛盾评审能发现，但最好在生成时就提醒。
+  const IN_MEMORY = /内存|进程内|in-?memory|new Map\(/i
+  const implicit = (plan.data ?? [])
+    .flatMap((table) =>
+      (table.rowWriters ?? []).flatMap((writer) => {
+        const module = plan.modules.find((entry) => entry.id === writer)
+        if (module === undefined) return []
+        const texts = [module.title, module.responsibility ?? '', ...(module.constraints ?? [])]
+        return texts.some((text) => IN_MEMORY.test(text)) ? [`${table.table} ← ${writer}`] : []
+      }),
+    )
+  if (implicit.length > 0) {
+    out.push({ code: 'IN_MEMORY_VS_TABLE', count: implicit.length, items: implicit })
   }
 
   // Two modules claiming the same file (or paths that differ only by case) is the

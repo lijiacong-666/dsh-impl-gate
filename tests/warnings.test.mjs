@@ -260,3 +260,10 @@ test('TYPE_OWNER_NO_SOURCE flags an owner whose files are all non-source', () =>
   assert.ok(warning)
   assert.deepEqual(warning.items, ['User → M1'])
 })
+test('IN_MEMORY_VS_TABLE flags a table writer whose prose says in-memory', () => {
+  const plan = basePlan()
+  plan.modules[0].responsibility = '在内存 Map 里存用户'
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'IN_MEMORY_VS_TABLE')
+  assert.ok(warning)
+  assert.ok(warning.items.some((item) => item.endsWith('← M1')))
+})

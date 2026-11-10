@@ -201,6 +201,7 @@ impl_gate_review({
 - `BOUNDARY_UNUSED`：`boundaries` 里声明了某个外部依赖，但技术栈、约束、文件与交付物里再没出现过它
 - `WRITE_NO_VALIDATION_ERROR`：POST/PATCH/PUT 带请求体，却没有哪个归属该模块的错误码是 400/422——参数错了回什么只能靠实现者猜
 - `TYPE_OWNER_NO_SOURCE`：类型写了 `owner`，但该模块的白名单里没有一个源码文件（只有 `.sql`/`.md`），实现者没地方「定义并导出」它
+- `IN_MEMORY_VS_TABLE`：库表声明某模块负责写，该模块的职责/约束却说「在内存里存」——两边都像真的，实现者只能二选一
 
 **实测（最小 e2e）**：单模块、90 行任务卡，交给没读过 plan 的实现者，写出 3 个文件、5/5 测试通过；impl_gate_record 出 PASS 3，impl_gate_check 回显同一份证据。它提出的 5 个「文档没写」问题、以及这次暴露的两个 gate 误判，都记在 [docs/CASE-STUDY-mini.md](docs/CASE-STUDY-mini.md)。
 
