@@ -36,6 +36,9 @@ export interface ComposeWarning {
     | 'TYPE_OWNER_MISSING'
     | 'AC_HTTP_OUTSIDE_SHELL'
     | 'AC_SHELL_LATER'
+    | 'STATUS_DEFAULTED'
+    | 'LIST_ORDER_UNDEFINED'
+    | 'PATCH_NULLABLE_AMBIGUOUS'
   count: number
   items: string[]
 }
@@ -191,6 +194,53 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   if (unused.length > 0) out.push({ code: 'ERROR_UNUSED', count: unused.length, items: unused })
   const noAuth = (plan.http ?? []).filter((entry) => entry.auth === undefined).map((entry) => `${entry.method} ${entry.path}`)
   if (noAuth.length > 0) out.push({ code: 'AUTH_UNSPECIFIED', count: noAuth.length, items: noAuth })
+
+  // A mutating route without an explicit status is the "was it 200 or 201?" hole:
+  // the renderer defaults it, but the default is a guess, not a decision.
+  const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
+  const defaulted = (plan.http ?? [])
+    .filter((entry) => MUTATING.has(entry.method) && entry.status === undefined)
+    .map((entry) => `${entry.method} ${entry.path}`)
+  if (defaulted.length > 0) out.push({ code: 'STATUS_DEFAULTED', count: defaulted.length, items: defaulted })
+
+  // A list response with no declared order is the "the test asserts [1,2,3] but the
+  // database may return [3,1,2]" hole. Only flag when the response type looks like
+  // a collection and nothing mentions ordering.
+  const collection = (name: string | undefined): boolean => {
+    if (name === undefined || name === 'void' || name === '') return false
+    if (name.endsWith('[]')) return true
+    if (/(List|Page|Collection)$/.test(name)) return true
+    const declared = (plan.types ?? []).find((type) => type.name === name)
+    const fields = declared?.fields ?? []
+    const arrays = fields.filter((field) => field.type.includes('[]') || field.type.startsWith('Array<'))
+    if (arrays.length === 0) return false
+    // A payload with one array field is a list only when that field is the payload
+    // itself (items/rows/...), not when it merely carries a nested collection.
+    return arrays.length === fields.length || arrays.some((field) => /^(items|rows|list|results|data|entries)$/i.test(field.name))
+  }
+  const orderWords = (text: string): boolean => /排序|order\s*by|sort(ed)?\s*by|orderBy|sortBy/i.test(text)
+  const hasOrderNote = (moduleId: string): boolean =>
+    (plan.modules ?? []).some((module) => module.id === moduleId && (module.constraints ?? []).some(orderWords))
+  const unordered = (plan.http ?? [])
+    .filter((entry) => collection(entry.res))
+    .filter((entry) => !(entry.query ?? []).some((param) => /^(sort|order|orderBy|sortBy)$/i.test(param.name)))
+    .filter((entry) => !hasOrderNote(entry.module))
+    .map((entry) => `${entry.method} ${entry.path} → ${entry.res ?? ''}`)
+  if (unordered.length > 0) out.push({ code: 'LIST_ORDER_UNDEFINED', count: unordered.length, items: unordered })
+
+  // A PATCH request type whose every field is nullable cannot express "leave it
+  // alone" versus "set it to null": the implementer has to guess.
+  const patchTypes = new Set<string>()
+  for (const entry of plan.http ?? []) {
+    if (entry.method === 'PATCH' && entry.req !== undefined && entry.req !== '') patchTypes.add(entry.req)
+  }
+  const ambiguousPatch = [...patchTypes].filter((name) => {
+    const declared = (plan.types ?? []).find((type) => type.name === name)
+    const fields = declared?.fields ?? []
+    if (fields.length === 0) return false
+    return fields.every((field) => /null/.test(field.type) || field.note === '可选')
+  })
+  if (ambiguousPatch.length > 0) out.push({ code: 'PATCH_NULLABLE_AMBIGUOUS', count: ambiguousPatch.length, items: ambiguousPatch })
 
   // A type used by more than one module but claimed by nobody is the "six DTOs,
   // six copies" failure: every module invents its own shape. Warning, not error,

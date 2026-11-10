@@ -194,3 +194,47 @@ test('an HTTP AC in a wave before the shell is reported as AC_SHELL_LATER', () =
   assert.ok(warning)
   assert.deepEqual(warning.items, ['M1: AC-M1-1 runs in wave 1, shell M2 is wave 2'])
 })
+test('mutating routes without an explicit status are reported', () => {
+  const plan = {
+    modules: [{ id: 'M1', constraints: [], acceptance: [] }],
+    http: [
+      { method: 'POST', path: '/things', module: 'M1', handler: 'createThing', auth: 'public' },
+      { method: 'GET', path: '/things', module: 'M1', handler: 'listThings', auth: 'public' },
+      { method: 'DELETE', path: '/things/:id', module: 'M1', handler: 'deleteThing', auth: 'public', status: 204, res: 'void' },
+    ],
+  }
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'STATUS_DEFAULTED')
+  assert.ok(warning)
+  assert.deepEqual(warning.items, ['POST /things'])
+})
+
+test('a list response with no declared order is reported', () => {
+  const plan = {
+    modules: [{ id: 'M1', constraints: [], acceptance: [] }],
+    types: [{ name: 'ThingPage', kind: 'object', fields: [{ name: 'items', type: 'Thing[]' }] }],
+    http: [
+      { method: 'GET', path: '/things', module: 'M1', handler: 'listThings', auth: 'public', res: 'ThingPage', status: 200 },
+      { method: 'GET', path: '/things/sorted', module: 'M1', handler: 'listSorted', auth: 'public', res: 'ThingPage', status: 200, query: [{ name: 'orderBy', type: 'string' }] },
+    ],
+  }
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'LIST_ORDER_UNDEFINED')
+  assert.ok(warning)
+  assert.deepEqual(warning.items, ['GET /things → ThingPage'])
+})
+
+test('an all-nullable PATCH request type is reported', () => {
+  const plan = {
+    modules: [{ id: 'M1', constraints: [], acceptance: [] }],
+    types: [
+      { name: 'ThingPatch', kind: 'object', fields: [{ name: 'name', type: 'string | null' }, { name: 'note', type: 'string | null' }] },
+      { name: 'OtherPatch', kind: 'object', fields: [{ name: 'name', type: 'string' }] },
+    ],
+    http: [
+      { method: 'PATCH', path: '/things/:id', module: 'M1', handler: 'updateThing', auth: 'public', req: 'ThingPatch', status: 200 },
+      { method: 'PATCH', path: '/others/:id', module: 'M1', handler: 'updateOther', auth: 'public', req: 'OtherPatch', status: 200 },
+    ],
+  }
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'PATCH_NULLABLE_AMBIGUOUS')
+  assert.ok(warning)
+  assert.deepEqual(warning.items, ['ThingPatch'])
+})
