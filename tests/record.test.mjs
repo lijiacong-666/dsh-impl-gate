@@ -141,3 +141,15 @@ test('evidence markdown is written when tasks/ exists', () => {
   assert.match(doc, /\| AC-M1-1 \| M1 \| SKIPPED \| — \|/)
   fs.rmSync(root, { recursive: true, force: true })
 })
+test('log tails drop ANSI colour codes so evidence stays readable', () => {
+  const plan = basePlan()
+  plan.modules[0].acceptance[0].test = 'node -e "process.stdout.write(String.fromCharCode(27) + \'[31mred\' + String.fromCharCode(27) + \'[0m\')"'
+  const { root, outDir } = tmpProject(plan)
+  const outcome = recordAcceptance(outDir, {})
+  assert.equal(outcome.ok, true)
+  const stored = JSON.parse(fs.readFileSync(path.join(outDir, AC_EVIDENCE_REL), 'utf8'))
+  const first = stored.items.find((item) => item.id === 'AC-M1-1')
+  assert.match(first.tail, /red/)
+  assert.doesNotMatch(first.tail, /\u001b\[/)
+  fs.rmSync(root, { recursive: true, force: true })
+})

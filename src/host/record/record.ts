@@ -94,8 +94,11 @@ function hashFile(file: string): string {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
 
+// eslint-disable-next-line no-control-regex
+const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g
+
 function tailOf(stdout: string | Buffer | null | undefined, stderr: string | Buffer | null | undefined, lines: number): string {
-  const text = `${stdout?.toString() ?? ''}\n${stderr?.toString() ?? ''}`.trim()
+  const text = `${stdout?.toString() ?? ''}\n${stderr?.toString() ?? ''}`.replace(ANSI, '').trim()
   if (text === '') return ''
   const rows = text.split(/\r?\n/).filter((row) => row.trim() !== '')
   const tail = rows.slice(-lines).join('\n')
