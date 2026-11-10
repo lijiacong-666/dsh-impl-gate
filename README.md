@@ -116,7 +116,7 @@ dsh plugin --profile headless add dsh-impl-gate
 | `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`（plan 已存在则 `E_PLAN_EXISTS`，不会覆盖）；`draft` 只按现有 plan 刷新 `SPEC-DRAFT.md`，从不写 plan；`materialize` 生成图谱、`SPEC.md`、`export/`、`.impl-gate/checklist.md` 与 `.impl-gate/mapping.md` |
 | `impl_gate_init` | `outDir`（必填）、`implRoot`、`overwrite` | 按波次生成 `<outDir>/tasks/`：`TASKS.md`、`cards.json`、`wave-<n>/<id>-<dir>.md`；不改图谱、`SPEC.md`、`export/` |
 | `impl_gate_review` | `outDir`（必填）、`reviewer`（必填）、`round`、`verdicts`（必填） | 追加一轮评审到 `<outDir>/.impl-gate/review.json`：每模块 `ready`/`clarify`/`blocked`，`blocked` 带 `blocking[]`；同轮重复提交拒绝 |
-| `impl_gate_record` | `outDir`（必填）、`implRoot`、`modules`、`timeoutMs`、`dryRun` | 执行 plan 里每条 AC 的 `test` 命令（只认白名单首词），把 PASS/FAIL、退出码、日志尾部写进 `.impl-gate/ac-evidence.json`；`tasks/` 存在时同时刷新 `tasks/EVIDENCE.md` |
+| `impl_gate_record` | `outDir`（必填）、`implRoot`、`modules`、`timeoutMs`、`dryRun` | 执行 plan 里每条 AC 的 `test` 命令（只认白名单首词），把 PASS/FAIL、退出码、日志尾部写进 `.impl-gate/ac-evidence.json`；`tasks/` 存在时同时刷新 `tasks/EVIDENCE.md`。同一 plan 下多次调用会累积证据：只带 `modules` 重跑某几个模块时，其他模块上次的记录保留 |
 
 ### 实现证据（0.3.6）
 

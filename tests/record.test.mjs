@@ -153,3 +153,19 @@ test('log tails drop ANSI colour codes so evidence stays readable', () => {
   assert.doesNotMatch(first.tail, /\u001b\[/)
   fs.rmSync(root, { recursive: true, force: true })
 })
+
+test('recording one module keeps evidence produced for the others', () => {
+  const plan = basePlan()
+  const { root, outDir } = tmpProject(plan)
+  const r1 = recordAcceptance(outDir, { modules: ['M1'] })
+  assert.equal(r1.ok, true, JSON.stringify(r1.error ?? r1.summary))
+  const r2 = recordAcceptance(outDir, { modules: ['M2'] })
+  assert.equal(r2.ok, true, JSON.stringify(r2.error ?? r2.summary))
+
+  const stored = JSON.parse(fs.readFileSync(path.join(outDir, AC_EVIDENCE_REL), 'utf8'))
+  const ids = stored.items.map((item) => item.id).sort()
+  assert.ok(ids.includes('AC-M1-1'), 'M1 evidence survived the M2 run')
+  assert.ok(ids.includes('AC-M2-1'), 'M2 evidence recorded')
+  assert.equal(stored.summary.total, 3)
+  fs.rmSync(root, { recursive: true, force: true })
+})

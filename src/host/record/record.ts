@@ -154,9 +154,11 @@ export function recordAcceptance(outDirRaw: string, options: RecordOptions = {})
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const maxTailLines = options.maxTailLines ?? DEFAULT_TAIL_LINES
   const items: EvidenceItem[] = []
+  const recordedModules: string[] = []
 
   for (const module of plan.modules) {
     if (wanted !== null && !wanted.has(module.id)) continue
+    recordedModules.push(module.id)
     for (const acceptance of module.acceptance ?? []) {
       const command = (acceptance.test ?? '').trim()
       if (command === '') {
@@ -203,31 +205,48 @@ export function recordAcceptance(outDirRaw: string, options: RecordOptions = {})
     }
   }
 
-  const summary: RecordSummary = {
-    pass: items.filter((item) => item.status === 'PASS').length,
-    fail: items.filter((item) => item.status === 'FAIL').length,
-    skipped: items.filter((item) => item.status === 'SKIPPED').length,
-    total: items.length,
+  const planSha256 = hashFile(planFile)
+  const evidencePath = path.join(outDir, AC_EVIDENCE_REL)
+
+  // 部分模块重跑时不要把别的模块已有证据冲掉：同一份 plan 下按模块合并。
+  let merged: EvidenceItem[] = items
+  try {
+    const prev = JSON.parse(fs.readFileSync(evidencePath, 'utf8')) as {
+      planSha256?: string
+      items?: EvidenceItem[]
+    }
+    if (prev.planSha256 === planSha256 && Array.isArray(prev.items)) {
+      const recorded = new Set(recordedModules)
+      const kept = prev.items.filter((item) => !recorded.has(item.module))
+      merged = [...kept, ...items].sort((a, b) => a.id.localeCompare(b.id))
+    }
+  } catch {
+    merged = items
   }
 
-  const evidencePath = path.join(outDir, AC_EVIDENCE_REL)
-  const planSha256 = hashFile(planFile)
+  const summary: RecordSummary = {
+    pass: merged.filter((item) => item.status === 'PASS').length,
+    fail: merged.filter((item) => item.status === 'FAIL').length,
+    skipped: merged.filter((item) => item.status === 'SKIPPED').length,
+    total: merged.length,
+  }
+
   try {
     fs.mkdirSync(path.dirname(evidencePath), { recursive: true })
     fs.writeFileSync(
       evidencePath,
-      `${JSON.stringify({ schemaVersion: 1, generatedAt: new Date().toISOString(), planSha256, summary, items }, null, 2)}\n`,
+      `${JSON.stringify({ schemaVersion: 1, generatedAt: new Date().toISOString(), planSha256, summary, items: merged }, null, 2)}\n`,
       'utf8',
     )
     const tasksDir = path.join(outDir, 'tasks')
     if (fs.existsSync(tasksDir)) {
-      fs.writeFileSync(path.join(outDir, TASKS_EVIDENCE_REL), renderEvidenceDoc({ planSha256, summary, items, plan, dryRun: options.dryRun === true }), 'utf8')
+      fs.writeFileSync(path.join(outDir, TASKS_EVIDENCE_REL), renderEvidenceDoc({ planSha256, summary, items: merged, plan, dryRun: options.dryRun === true }), 'utf8')
     }
   } catch (error) {
     return failure('RECORD_WRITE_FAILED', `cannot write ${evidencePath}: ${(error as Error).message}`)
   }
 
-  return { ok: true, evidencePath: path.relative(outDir, evidencePath).split(path.sep).join('/'), summary, items, planSha256 }
+  return { ok: true, evidencePath: path.relative(outDir, evidencePath).split(path.sep).join('/'), summary, items: merged, planSha256 }
 }
 
 export function renderEvidenceDoc(input: {
