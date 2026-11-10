@@ -373,3 +373,18 @@ test('AC_TEST_UNRUNNABLE flags acceptance rows record cannot execute', () => {
   assert.match(warning?.items.join(' | ') ?? '', /人工检查/)
   assert.match(warning?.items.join(' | ') ?? '', /no command/)
 })
+
+test('CONSTRAINT_FIELD_UNKNOWN flags a field the prose invented but the type lacks', () => {
+  const plan = basePlan()
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'CONSTRAINT_FIELD_UNKNOWN'))
+
+  plan.modules[1].constraints = ['按 ReminderQuery.medicineId 过滤']
+  plan.types.push({ name: 'ReminderQuery', kind: 'object', fields: [{ name: 'kind', type: 'string' }] })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'CONSTRAINT_FIELD_UNKNOWN')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /M2: ReminderQuery\.medicineId/)
+
+  const query = plan.types.find((type) => type.name === 'ReminderQuery')
+  query.fields.push({ name: 'medicineId', type: 'string | null' })
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'CONSTRAINT_FIELD_UNKNOWN'))
+})

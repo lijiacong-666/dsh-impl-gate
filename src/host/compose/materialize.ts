@@ -43,6 +43,7 @@ export interface ComposeWarning {
     | 'BOUNDARY_UNUSED'
     | 'WRITE_NO_VALIDATION_ERROR'
     | 'TYPE_OWNER_NO_SOURCE'
+  | 'CONSTRAINT_FIELD_UNKNOWN'
     | 'IN_MEMORY_VS_TABLE'
     | 'TOOLING_UNOWNED'
     | 'AC_STATUS_CONTRADICTION'
@@ -349,6 +350,30 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .map((type) => `${type.name} → ${type.owner}`)
   if (noSource.length > 0) {
     out.push({ code: 'TYPE_OWNER_NO_SOURCE', count: noSource.length, items: noSource })
+  }
+
+  // 约束里写 `ReminderQuery.medicineId`，但类型字段表里没有这个字段：散文与类型
+  // 各说一套，实现者只能猜。这是「只改了散文、没改结构」的典型残留。
+  const fieldsOf = new Map((plan.types ?? []).map((type) => [type.name, new Set((type.fields ?? []).map((f) => f.name))]))
+  const unknownFields: string[] = []
+  const seenField = new Set<string>()
+  for (const module of plan.modules) {
+    const texts = [...(module.constraints ?? []), ...(module.acceptance ?? []).map((item) => item.assertion)]
+    for (const text of texts) {
+      for (const match of text.matchAll(/\b([A-Z][A-Za-z0-9]*)\.([a-z][A-Za-z0-9]*)\b/g)) {
+        const type = match[1] ?? ''
+        const field = match[2] ?? ''
+        const fields = fieldsOf.get(type)
+        if (fields === undefined || fields.has(field)) continue
+        const line = `${module.id}: ${type}.${field}`
+        if (seenField.has(line)) continue
+        seenField.add(line)
+        unknownFields.push(line)
+      }
+    }
+  }
+  if (unknownFields.length > 0) {
+    out.push({ code: 'CONSTRAINT_FIELD_UNKNOWN', count: unknownFields.length, items: unknownFields })
   }
 
   // 表声明了这个模块负责写，模块自己的说明却说「内存里存着」：实现者只能二选一，
