@@ -18,6 +18,10 @@ export { collectWarnings } from './compose/materialize.js'
 export { recordReview } from './review/review.js'
 export { recordAcceptance, renderEvidenceDoc, runnerOf, AC_EVIDENCE_REL, TASKS_EVIDENCE_REL } from './record/record.js'
 export type { ReviewPayload, ReviewVerdict, ReviewStatus } from './review/review.js'
+// Exported for unit tests of the B5/Q10 edge cases (need-free modules, broken graph).
+export { checkB5 } from './assertions/delivery.js'
+export { checkQ10 } from './assertions/q10.js'
+
 export type { EvidenceItem, EvidenceStatus, RecordOptions, RecordOutcome, RecordPayload, RecordSummary } from './record/record.js'
 export { renderChecklistTemplate, mergeChecklist, CHECKLIST_REL } from './compose/checklist-template.js'
 export { renderMappingTemplate, MAPPING_REL } from './compose/mapping-template.js'
