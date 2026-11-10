@@ -134,7 +134,9 @@ export const checkB5: Assertion = async (ctx) => {
   const emptyCells = rows.filter((row) => row.module === '' || row.item === '')
   const unknown = rows.filter((row) => row.module !== '' && !modules.has(row.module)).map((row) => row.module)
   const seen = new Set(rows.map((row) => row.module).filter(Boolean))
-  if (rows.length === 0 || emptyCells.length > 0 || unknown.length > 0) {
+  // 没有 requires 的模块（例如单模块项目）不需要自己的行：B1 已保证每条需求有行，
+  // 这里只判空单元与未知模块名。
+  if (emptyCells.length > 0 || unknown.length > 0) {
     return {
       status: 'FAIL',
       evidence: `rows=${rows.length} modules=${seen.size} empty_cells=${emptyCells.length} unknown=${unknown.join(',') || '-'}`,
