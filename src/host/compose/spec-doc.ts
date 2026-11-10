@@ -187,6 +187,17 @@ export function renderSpecDoc(input: SpecDocInput): string {
       }
       lines.push('')
     }
+    const withQuery = http.filter((route) => (route.query ?? []).length > 0)
+    if (withQuery.length > 0) {
+      lines.push('查询参数（契约的一部分）：', '')
+      for (const route of withQuery) {
+        const params = (route.query ?? []).map(
+          (param) => `${param.name}（${param.type}，${param.required === true ? '必填' : '可选'}）${param.note !== undefined ? ` — ${param.note}` : ''}`,
+        )
+        lines.push(`- ${route.method} ${route.path} — ${params.join('、')}`)
+      }
+      lines.push('')
+    }
     const documented = http.filter((route) => route.reqExample !== undefined || route.resExample !== undefined)
     for (const route of documented) {
       lines.push(`#### ${route.method} ${route.path} 示例`, '')

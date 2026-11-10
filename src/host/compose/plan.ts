@@ -54,6 +54,15 @@ export interface PlanHttp {
   status?: number
   /** Response headers that are part of the contract, e.g. `{ "X-Row-Count": "<int>" }`. */
   resHeaders?: Record<string, string>
+  /** Explicit query parameters; `required` defaults to false. */
+  query?: PlanHttpQuery[]
+}
+
+export interface PlanHttpQuery {
+  name: string
+  type: string
+  required?: boolean
+  note?: string
 }
 
 export interface PlanFlowStep {
@@ -215,7 +224,8 @@ const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
 const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note', 'owner'])
 const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
 const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape', 'by'])
-const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth', 'reqExample', 'resExample', 'status', 'resHeaders'])
+const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth', 'reqExample', 'resExample', 'status', 'resHeaders', 'query'])
+const HTTP_QUERY_KEYS = new Set(['name', 'type', 'required', 'note'])
 const FLOW_KEYS = new Set(['id', 'name', 'trigger', 'steps', 'success', 'failure'])
 const RUNTIME_KEYS = new Set(['port', 'start', 'health', 'migrate', 'rollback'])
 const FLOW_STEP_KEYS = new Set(['module', 'action', 'note'])
@@ -828,6 +838,35 @@ function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>,
             problem(problems, pointer(at, 'resHeaders'), `header "${name}" must be a non-empty string`)
           }
         }
+      }
+    }
+    if (entry.query !== undefined) {
+      const params = entry.query
+      if (!Array.isArray(params)) {
+        problem(problems, pointer(at, 'query'), 'must be an array of {name, type, required?}')
+      } else {
+        params.forEach((param, paramIndex) => {
+          const paramAt = pointer(pointer(at, 'query'), paramIndex)
+          if (!isRecord(param)) {
+            problem(problems, paramAt, 'must be an object')
+            return
+          }
+          checkKnownKeys(param, HTTP_QUERY_KEYS, paramAt, problems)
+          const name = readString(param.name, pointer(paramAt, 'name'), problems)
+          if (name.length > 0 && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+            problem(problems, pointer(paramAt, 'name'), 'must be a plain identifier')
+          }
+          const paramType = readString(param.type, pointer(paramAt, 'type'), problems)
+          if (paramType.length > 0 && /^[A-Z]/.test(paramType) && !typeNames.has(paramType)) {
+            problem(problems, pointer(paramAt, 'type'), `unknown type "${paramType}"`)
+          }
+          if (param.required !== undefined && typeof param.required !== 'boolean') {
+            problem(problems, pointer(paramAt, 'required'), 'must be a boolean')
+          }
+          if (param.note !== undefined && typeof param.note !== 'string') {
+            problem(problems, pointer(paramAt, 'note'), 'must be a string when present')
+          }
+        })
       }
     }
     for (const field of ['reqExample', 'resExample'] as const) {

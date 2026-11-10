@@ -124,3 +124,47 @@ test('a GET example is labelled as query parameters, not a body', () => {
   assert.match(doc, /查询参数示例：/)
   assert.doesNotMatch(doc.split('#### GET /things 示例')[1], /请求体：/)
 })
+
+test('declared query parameters are rendered with requiredness', () => {
+  const plan = basePlan()
+  plan.http.push({
+    method: 'GET',
+    path: '/things',
+    module: 'M1',
+    handler: 'listThings',
+    res: 'Thing',
+    query: [
+      { name: 'month', type: 'string', required: true },
+      { name: 'page', type: 'number', note: '从 1 开始' },
+    ],
+  })
+  plan.modules[0].exposes.push({ kind: 'http', signature: 'listThings(month: string): Promise<Thing>' })
+  assert.deepEqual(validatePlan(plan).problems, [])
+  const doc = render(plan)
+  assert.match(doc, /查询参数（契约的一部分）：/)
+  assert.match(doc, /- GET \/things — month（string，必填）、page（number，可选） — 从 1 开始/)
+})
+
+test('a query parameter with an undeclared type or a bad name is a plan problem', () => {
+  const plan = basePlan()
+  plan.http[0].query = [{ name: '1bad', type: 'Thing' }]
+  assert.ok(
+    validatePlan(plan).problems.some((entry) => entry.path === '/http/0/query/0/name' && entry.message.includes('plain identifier')),
+  )
+
+  const unknownType = basePlan()
+  unknownType.http[0].query = [{ name: 'q', type: 'Nope' }]
+  assert.ok(
+    validatePlan(unknownType).problems.some(
+      (entry) => entry.path === '/http/0/query/0/type' && entry.message.includes('unknown type "Nope"'),
+    ),
+  )
+
+  const notArray = basePlan()
+  notArray.http[0].query = { month: 'string' }
+  assert.ok(
+    validatePlan(notArray).problems.some(
+      (entry) => entry.path === '/http/0/query' && entry.message.includes('must be an array'),
+    ),
+  )
+})

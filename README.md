@@ -180,6 +180,8 @@ impl_gate_review({
 
 **错误对象契约（0.3.3）**：`SPEC.md` §8 的接口约定固定写死一条——抛出的值必须是 `instanceof Error`，带 `code: string`（取自 §4.3）与可选 `details: unknown`，不要另造裸对象。AC 里断言 `err.code` 时按这条实现。
 
+**查询参数（0.3.4）**：`http[].query` 写 `{name, type, required?}`（不写 `required` 视为可选），4.4 节单独列出「查询参数（契约的一部分）」；`type` 若是大写开头的自定义类型，必须已在 `types` 声明，否则 `/http/<i>/query/<j>/type: unknown type "Nope"`。
+
 **陈旧产物检测（0.3.1）**：`ownership.json` 现在记 `plan_sha256`、`generated_at` 与真实版本号（`managedBy: dsh-impl-gate@<version>`）。改了 `compose-plan.json` 但没重跑 materialize / init 时，`impl_gate_check` 会多打一行 `stale design: …`，提示 SPEC、验收表与任务卡都过期。
 
 ### 配置
