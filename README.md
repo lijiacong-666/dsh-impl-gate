@@ -174,7 +174,11 @@ impl_gate_review({
 
 **重跑不丢证据（0.3.1）**：改 plan 后再次 `materialize` 只重写 `NOT-RUN` 行；已填 `PASS`/`FAIL` 的行连同 evidence 原样保留，旧文件先备份到 `.impl-gate/checklist.md.bak-<时间戳>`，结果里带 `checklistPreserved` 与 `checklistBackupPath`。注意 `impl_gate_check` 只看 `NOT-RUN` 与 `## 未覆盖` 是否对称——保留行不会因为 plan 改了而被判失效，这是有意的：改 plan 后请人工复核保留行的 evidence 是否仍成立。
 
-**warnings（0.3.1）**：materialize 额外返回九类「能生成但该被看见」的缺口——`COVERAGE_GAP`（goal 没有 AC 的 `covers`）、`ERROR_OWNER_MISSING`（错误码缺 `by`）、`AUTH_UNSPECIFIED`（路由缺 `auth`）、`ERROR_UNUSED`（声明了没人引用的错误码）、`FILE_OWNERSHIP_OVERLAP`（两个模块的文件路径相同或只差大小写）、`CONSTRAINT_HAS_PATH`（约束里写了具体文件路径，会在 specgraph 内容规则处炸）、`AC_AUTH_UNSTATED`（需要鉴权的路由，AC 里裸调用、没提 Origin/401）、`HTTP_ROUTE_UNCOVERED`（没有任何 AC 断言过的路由）、`AC_HTTP_OUTSIDE_SHELL`（模块自己没有路由，却在 AC 里断言 HTTP 调用——它所在波次里没有服务可打）。它们不拦截生成；要拦就在评审环里拦。
+**warnings（0.3.1）**：materialize 额外返回九类「能生成但该被看见」的缺口——`COVERAGE_GAP`（goal 没有 AC 的 `covers`）、`ERROR_OWNER_MISSING`（错误码缺 `by`）、`AUTH_UNSPECIFIED`（路由缺 `auth`）、`ERROR_UNUSED`（声明了没人引用的错误码）、`FILE_OWNERSHIP_OVERLAP`（两个模块的文件路径相同或只差大小写）、`CONSTRAINT_HAS_PATH`（约束里写了具体文件路径，会在 specgraph 内容规则处炸）、`AC_AUTH_UNSTATED`（需要鉴权的路由，AC 里裸调用、没提 Origin/401）、`HTTP_ROUTE_UNCOVERED`（没有任何 AC 断言过的路由）、`AC_HTTP_OUTSIDE_SHELL`（模块自己没有路由，却在 AC 里断言 HTTP 调用——它所在波次里没有服务可打）。它们不拦截生成；要拦就在评审环里拦。0.3.3 起多一类 `TYPE_OWNER_MISSING`（被两个以上模块引用、却没有 `owner` 的类型）。
+
+**共享类型归属（0.3.3）**：`types[].owner` 写「哪个模块的文件定义并导出它」，渲染成类型块下的「归属：M1」。跨模块共用的类型没有 `owner` 时 materialize 会出 `TYPE_OWNER_MISSING` 警告——这正是「六个 DTO、六份各不相同的形状」的来源。
+
+**错误对象契约（0.3.3）**：`SPEC.md` §8 的接口约定固定写死一条——抛出的值必须是 `instanceof Error`，带 `code: string`（取自 §4.3）与可选 `details: unknown`，不要另造裸对象。AC 里断言 `err.code` 时按这条实现。
 
 **陈旧产物检测（0.3.1）**：`ownership.json` 现在记 `plan_sha256`、`generated_at` 与真实版本号（`managedBy: dsh-impl-gate@<version>`）。改了 `compose-plan.json` 但没重跑 materialize / init 时，`impl_gate_check` 会多打一行 `stale design: …`，提示 SPEC、验收表与任务卡都过期。
 

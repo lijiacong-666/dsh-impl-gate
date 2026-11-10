@@ -22,6 +22,8 @@ export interface PlanType {
   values?: string[]
   source?: string
   note?: string
+  /** Module id that owns the file this type is defined in (0.3.3). */
+  owner?: string
 }
 
 export interface PlanError {
@@ -210,7 +212,7 @@ const GLOBALS_KEYS = new Set(['conventions', 'forbidden', 'envKeys', 'fieldCase'
 const DELIVERABLE_KEYS = new Set(['tree', 'files'])
 const FILE_KEYS = new Set(['path', 'purpose'])
 const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
-const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note'])
+const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note', 'owner'])
 const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
 const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape', 'by'])
 const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth', 'reqExample', 'resExample', 'status', 'resHeaders'])
@@ -626,6 +628,9 @@ function validateTypes(raw: unknown, problems: PlanProblem[]): string[] {
     if (entry.note !== undefined && typeof entry.note !== 'string') {
       problem(problems, pointer(at, 'note'), 'must be a string when present')
     }
+    if (entry.owner !== undefined && (typeof entry.owner !== 'string' || !/^M[0-9]+$/.test(entry.owner))) {
+      problem(problems, pointer(at, 'owner'), 'must be a module id like "M1"')
+    }
     if (kind === 'object') {
       if (entry.values !== undefined) problem(problems, pointer(at, 'values'), 'is only allowed for enum/union')
       if (entry.source !== undefined) problem(problems, pointer(at, 'source'), 'is only allowed for external')
@@ -716,6 +721,19 @@ function validateErrors(
 }
 
 /** HTTP surface: module/handler must exist, method+path are unique, paths start with "/". */
+function validateTypeOwners(raw: unknown, modulesRaw: unknown, problems: PlanProblem[]): void {
+  if (!Array.isArray(raw) || !Array.isArray(modulesRaw)) return
+  const ids = new Set(
+    modulesRaw.filter((entry): entry is Json => isRecord(entry) && typeof entry.id === 'string').map((entry) => String(entry.id)),
+  )
+  raw.forEach((entry, index) => {
+    if (!isRecord(entry) || typeof entry.owner !== 'string' || entry.owner.length === 0) return
+    if (!ids.has(entry.owner)) {
+      problem(problems, pointer(pointer('/types', index), 'owner'), `module "${entry.owner}" does not exist`)
+    }
+  })
+}
+
 function validateHttp(raw: unknown, modulesRaw: unknown, typeNames: Set<string>, problems: PlanProblem[]): void {
   if (raw === undefined) return
   if (!Array.isArray(raw)) {
@@ -1483,6 +1501,7 @@ export function validatePlan(rawInput: unknown): PlanValidation {
   validateMigrationFiles(raw.data, raw.modules, problems)
   validateNotNullColumns(raw.data, raw.modules, raw.types, problems)
   validateHttp(raw.http, raw.modules, new Set(typeNames), problems)
+  validateTypeOwners(raw.types, raw.modules, problems)
   validateFlows(raw.flows, raw.modules, new Set(errorCodes), problems)
   validateUi(raw.ui, raw.modules, raw.http, problems)
   validateAcceptanceRoutes(raw.modules, raw.http, problems)

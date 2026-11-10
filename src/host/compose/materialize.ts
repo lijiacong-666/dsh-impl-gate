@@ -33,6 +33,7 @@ export interface ComposeWarning {
     | 'CONSTRAINT_HAS_PATH'
     | 'AC_AUTH_UNSTATED'
     | 'HTTP_ROUTE_UNCOVERED'
+    | 'TYPE_OWNER_MISSING'
     | 'AC_HTTP_OUTSIDE_SHELL'
   count: number
   items: string[]
@@ -186,6 +187,39 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   if (unused.length > 0) out.push({ code: 'ERROR_UNUSED', count: unused.length, items: unused })
   const noAuth = (plan.http ?? []).filter((entry) => entry.auth === undefined).map((entry) => `${entry.method} ${entry.path}`)
   if (noAuth.length > 0) out.push({ code: 'AUTH_UNSPECIFIED', count: noAuth.length, items: noAuth })
+
+  // A type used by more than one module but claimed by nobody is the "six DTOs,
+  // six copies" failure: every module invents its own shape. Warning, not error,
+  // because a truly local type may legitimately be used by nobody else.
+  const typeUsers = new Map<string, Set<string>>()
+  for (const type of plan.types ?? []) {
+    for (const module of plan.modules) {
+      const texts = [
+        ...(module.exposes ?? []).map((expose) => expose.signature),
+        ...(module.constraints ?? []),
+        ...(module.acceptance ?? []).map((item) => item.assertion),
+      ]
+      if (texts.some((text) => new RegExp(`\\b${type.name}\\b`).test(text))) {
+        const set = typeUsers.get(type.name) ?? new Set<string>()
+        set.add(module.id)
+        typeUsers.set(type.name, set)
+      }
+    }
+    for (const route of plan.http ?? []) {
+      if (route.req === type.name || route.res === type.name) {
+        const set = typeUsers.get(type.name) ?? new Set<string>()
+        set.add(route.module)
+        typeUsers.set(type.name, set)
+      }
+    }
+  }
+  const ownerless = (plan.types ?? [])
+    .filter((type) => type.owner === undefined || type.owner === '')
+    .filter((type) => (typeUsers.get(type.name)?.size ?? 0) > 1)
+    .map((type) => type.name)
+  if (ownerless.length > 0) {
+    out.push({ code: 'TYPE_OWNER_MISSING', count: ownerless.length, items: ownerless })
+  }
 
   // Two modules claiming the same file (or paths that differ only by case) is the
   // failure mode that shows up as "we both wrote it" after the fact. Warnings, not

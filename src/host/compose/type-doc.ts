@@ -25,6 +25,7 @@ export function renderTypeBlock(type: PlanType): string[] {
     lines.push(`取值：${values.length > 0 ? values : '（无）'}`)
   }
   if (type.note !== undefined && type.note.trim().length > 0) lines.push('', `说明：${type.note}`)
+  if (type.owner !== undefined) lines.push('', `归属：${type.owner}（由该模块的某个文件定义并导出）`)
   return lines
 }
 

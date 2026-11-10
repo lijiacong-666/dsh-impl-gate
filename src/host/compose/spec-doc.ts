@@ -284,6 +284,7 @@ export function renderSpecDoc(input: SpecDocInput): string {
     `- 字段命名：${fieldCase}`,
     `- 列表包裹：${envelope}`,
     `- 错误体形状：${cell(errorShape)}`,
+    '- 错误对象：抛出的值必须是 `instanceof Error`，带 `code: string`（取自 §4.3）与可选 `details: unknown`；不要另造裸对象',
     '',
   )
 
