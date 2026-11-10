@@ -213,6 +213,7 @@ impl_gate_review({
 
 **实测（最小 e2e）**：单模块、90 行任务卡，交给没读过 plan 的实现者，写出 3 个文件、5/5 测试通过；impl_gate_record 出 PASS 3，impl_gate_check 回显同一份证据。它提出的 5 个「文档没写」问题、以及这次暴露的两个 gate 误判，都记在 [docs/CASE-STUDY-mini.md](docs/CASE-STUDY-mini.md)。
 **实测（完整项目）**：同一句需求生成的 7 模块、24 路由、47 KB SPEC，由 6 个独立实现者只读任务卡写成，`impl_gate_record` 一次 21/21 PASS，`impl_gate_check` 回显同一份证据；实现者暴露的 9 个留白里有 5 个已回灌契约且代码零改动。过程与数字见 [docs/CASE-STUDY-run-log.md](docs/CASE-STUDY-run-log.md)。
+**实测（盲测 + 六轮评审）**：一句家用需求（药箱提醒）生成 9 模块、22 路由、1114 行 SPEC；六轮独立评审把 blocking 从 2 压到 0，最终 9/9 模块可开工；其中三类「散文与类型表不一致」被固化成了机检警告。过程与数字见 [docs/CASE-STUDY-pillbox.md](docs/CASE-STUDY-pillbox.md)。
 
 
 **共享类型归属（0.3.3）**：`types[].owner` 写「哪个模块的文件定义并导出它」，渲染成类型块下的「归属：M1」。跨模块共用的类型没有 `owner` 时 materialize 会出 `TYPE_OWNER_MISSING` 警告——这正是「六个 DTO、六份各不相同的形状」的来源。
