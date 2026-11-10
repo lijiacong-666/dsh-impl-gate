@@ -293,23 +293,27 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   ]
     .join('\n')
     .toLowerCase()
+  const RUNTIME_LIKE = /^(node(\.?js)?|deno|bun|python|java|go|rust|\.net|jdk|运行时|runtime|浏览器|browser|现代浏览器|fetch|文件系统|本地文件系统|os|stdin|stdout)$/i
   const unusedBoundary = (plan.boundaries ?? [])
     .map((boundary) => boundary.dependency)
-    .filter((dependency) => typeof dependency === 'string' && dependency !== '' && !corpus.includes(dependency.toLowerCase()))
+    .filter((dependency) => typeof dependency === 'string' && dependency !== '')
+    .filter((dependency) => !RUNTIME_LIKE.test(dependency.trim()) && !/浏览器|文件系统|fetch/i.test(dependency))
+    .filter((dependency) => !corpus.includes(dependency.toLowerCase()))
   // eslint-disable-next-line no-control-regex
   if (unusedBoundary.length > 0) {
     out.push({ code: 'BOUNDARY_UNUSED', count: unusedBoundary.length, items: unusedBoundary })
   }
 
-  // 写路由带请求体却没声明 4xx：实现者只能自己决定“参数错了回什么”。
-  const noValidation = (plan.http ?? [])
-    .filter((entry) => ['POST', 'PATCH', 'PUT'].includes(entry.method))
-    .filter((entry) => entry.req !== undefined && entry.req !== '' && entry.req !== 'void')
-    .filter((entry) => {
-      const own = (plan.errors ?? []).filter((error) => error.by === entry.module)
-      return !own.some((error) => error.status === 400 || error.status === 422)
-    })
-    .map((entry) => `${entry.method} ${entry.path} → ${entry.req ?? ''}`)
+  // 写路由带请求体却没声明任何 4xx：实现者只能自己决定“参数错了回什么”。
+  // 只在整份 plan 一个 400/422 都没有时才报——集中式校验（错误码归壳模块）是常见做法，
+  // 那种情况下逐路由报警只会变成噪音。
+  const anyValidation = (plan.errors ?? []).some((error) => error.status === 400 || error.status === 422)
+  const noValidation = anyValidation
+    ? []
+    : (plan.http ?? [])
+        .filter((entry) => ['POST', 'PATCH', 'PUT'].includes(entry.method))
+        .filter((entry) => entry.req !== undefined && entry.req !== '' && entry.req !== 'void')
+        .map((entry) => `${entry.method} ${entry.path} → ${entry.req ?? ''}`)
   if (noValidation.length > 0) {
     out.push({ code: 'WRITE_NO_VALIDATION_ERROR', count: noValidation.length, items: noValidation })
   }

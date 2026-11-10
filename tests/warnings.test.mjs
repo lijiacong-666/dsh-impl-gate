@@ -281,3 +281,12 @@ test('HTTP_ROUTE_UNCOVERED is silenced when a flow step calls the route', () => 
   const after = collectWarnings(plan).find((entry) => entry.code === 'HTTP_ROUTE_UNCOVERED')
   assert.equal(after, undefined)
 })
+test('BOUNDARY_UNUSED ignores runtimes and standards', () => {
+  const plan = basePlan()
+  plan.boundaries = [
+    { dependency: 'Node.js', purpose: '运行时', version: '22', fallback: '—' },
+    { dependency: '现代浏览器的 fetch', purpose: '浏览器能力', version: '—', fallback: '—' },
+  ]
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'BOUNDARY_UNUSED')
+  assert.equal(warning, undefined)
+})

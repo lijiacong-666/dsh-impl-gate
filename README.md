@@ -193,13 +193,13 @@ impl_gate_review({
 
 **重跑不丢证据（0.3.1）**：改 plan 后再次 `materialize` 只重写 `NOT-RUN` 行；已填 `PASS`/`FAIL` 的行连同 evidence 原样保留，旧文件先备份到 `.impl-gate/checklist.md.bak-<时间戳>`，结果里带 `checklistPreserved` 与 `checklistBackupPath`。注意 `impl_gate_check` 只看 `NOT-RUN` 与 `## 未覆盖` 是否对称——保留行不会因为 plan 改了而被判失效，这是有意的：改 plan 后请人工复核保留行的 evidence 是否仍成立。
 
-**warnings（0.3.1）**：materialize 额外返回九类「能生成但该被看见」的缺口——`COVERAGE_GAP`（goal 没有 AC 的 `covers`）、`ERROR_OWNER_MISSING`（错误码缺 `by`）、`AUTH_UNSPECIFIED`（路由缺 `auth`）、`ERROR_UNUSED`（声明了没人引用的错误码）、`FILE_OWNERSHIP_OVERLAP`（两个模块的文件路径相同或只差大小写）、`CONSTRAINT_HAS_PATH`（约束里写了具体文件路径，会在 specgraph 内容规则处炸）、`AC_AUTH_UNSTATED`（需要鉴权的路由，AC 里裸调用、没提 Origin/401）、`HTTP_ROUTE_UNCOVERED`（没有任何 AC 断言过的路由）、`AC_HTTP_OUTSIDE_SHELL`（模块自己没有路由，却在 AC 里断言 HTTP 调用——它所在波次里没有服务可打）。它们不拦截生成；要拦就在评审环里拦。0.3.3 起多一类 `TYPE_OWNER_MISSING`（被两个以上模块引用、却没有 `owner` 的类型）；0.3.6 起多五类「留白」警告（见下）——
+**warnings（0.3.1）**：materialize 额外返回『能生成但该被看见』的缺口，0.3.6 时共 17 类——`COVERAGE_GAP`（goal 没有 AC 的 `covers`）、`ERROR_OWNER_MISSING`（错误码缺 `by`）、`AUTH_UNSPECIFIED`（路由缺 `auth`）、`ERROR_UNUSED`（声明了没人引用的错误码）、`FILE_OWNERSHIP_OVERLAP`（两个模块的文件路径相同或只差大小写）、`CONSTRAINT_HAS_PATH`（约束里写了具体文件路径，会在 specgraph 内容规则处炸）、`AC_AUTH_UNSTATED`（需要鉴权的路由，AC 里裸调用、没提 Origin/401）、`HTTP_ROUTE_UNCOVERED`（既没有 AC 断言、也没被 `flows`/`ui` 引用的路由）、`AC_HTTP_OUTSIDE_SHELL`（模块自己没有路由，却在 AC 里断言 HTTP 调用——它所在波次里没有服务可打）。它们不拦截生成；要拦就在评审环里拦。0.3.3 起多一类 `TYPE_OWNER_MISSING`（被两个以上模块引用、却没有 `owner` 的类型）；0.3.6 起多七类「留白」警告（见下）——
 
 - `STATUS_DEFAULTED`：POST/PATCH/PUT/DELETE 没写 `status`，渲染时只能按 200 兜底（`res:"void"` 除外）；这类默认值是猜的，不是决定
 - `LIST_ORDER_UNDEFINED`：返回列表类类型（`XxxList`/`XxxPage`/数组字段就是载荷）却既没有 `query` 里的 `orderBy`/`sortBy`，模块约束里也没写排序口径
 - `PATCH_NULLABLE_AMBIGUOUS`：PATCH 的请求类型每个字段都可空，实现者无法区分「没提供」与「显式置空」
 - `BOUNDARY_UNUSED`：`boundaries` 里声明了某个外部依赖，但技术栈、约束、文件与交付物里再没出现过它
-- `WRITE_NO_VALIDATION_ERROR`：POST/PATCH/PUT 带请求体，却没有哪个归属该模块的错误码是 400/422——参数错了回什么只能靠实现者猜
+- `WRITE_NO_VALIDATION_ERROR`：POST/PATCH/PUT 带请求体，而整份 plan 一个 400/422 都没有——参数错了回什么只能靠实现者猜（集中式校验、错误码归壳模块的情况不算）
 - `TYPE_OWNER_NO_SOURCE`：类型写了 `owner`，但该模块的白名单里没有一个源码文件（只有 `.sql`/`.md`），实现者没地方「定义并导出」它
 - `IN_MEMORY_VS_TABLE`：库表声明某模块负责写，该模块的职责/约束却说「在内存里存」——两边都像真的，实现者只能二选一
 

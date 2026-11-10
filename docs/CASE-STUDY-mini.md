@@ -30,9 +30,9 @@ FAIL 路径也验过：在临时副本里故意加一条失败断言，record �
 |---|---|---|
 | 1 | AC-M1-3 只说「按 createdAt 升序」，同毫秒 tie-break 只在 §5 约束里 | 人：AC 文本弱于约束，机检分不清 |
 | 2 | 类型要求「由某文件定义并导出」，但 `.mjs` 没有类型工件 | `TYPE_OWNER_NO_SOURCE`（owner 的文件全是 .sql 时会报） |
-| 3 | §2 声明 sqlite，卡片却要求内存表，两者没对齐 | `BOUNDARY_UNUSED`（依赖全篇再没出现时报警） |
+| 3 | §2 声明 sqlite，卡片却要求内存表，两者没对齐 | `BOUNDARY_UNUSED` + `IN_MEMORY_VS_TABLE`（两条都会报） |
 | 4 | `handleCreate` 只返回 body，201 由谁写没规定 | 人：单模块项目里属实现细节 |
-| 5 | 非字符串/缺 title 的入参没规定 | `WRITE_NO_VALIDATION_ERROR`（写路由没有 400/422 时报警） |
+| 5 | 非字符串/缺 title 的入参没规定 | `WRITE_NO_VALIDATION_ERROR`（整份 plan 没有 400/422 时报警） |
 
 其中 3 条现在是机检警告，2 条只能靠评审或开工会上问。
 
