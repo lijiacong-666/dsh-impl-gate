@@ -84,3 +84,33 @@ impl_gate_init outDir=D:\...\pillbox
 - 成立的前提是**有评审环**：六轮里有四轮的 blocking 是评审看出来的，不是工具算出来的。
 - 工具的价值在于「不让同一类错过夜」：这一路四次把评审发现的模式固化成机检（0.3.12–0.3.16），
   代价是每轮都要压误报——四类警告的排查口径都写进了 `playbooks/compose.md` 的「warnings 怎么读」。
+## 追加：分页改动怎么把 blocking 从 0 拉回 3（第 7–9 轮）
+
+第 6 轮判 9/9 可开工之后，实际实现 M2 时暴露出一个真问题：`GET /api/medicines` 返回 `MedicineList`，
+里面有 `total`，但没有任何分页参数——`total` 只能等于「查到的全部行数」。这条被 0.3.20 的
+`LIST_PAGINATION_UNDECLARED` 抓到，于是回去补契约：给路由加 `page`/`pageSize`、给
+`MedicineList.total` 写清「符合筛选条件的总条数」、给 M2 加一条 `catalog-pagination` 验收。
+
+补完重评（第 7 轮）：**blocking 3**。根因是同一处——我只改了约束、`http[].query`、AC 三处，
+`types[MedicineQuery].fields` 忘了加 `page`/`pageSize`，而 `listMedicines(tx, query: MedicineQuery)`
+是唯一入口。评审还顺带指出：M4 用 `listMedicines` 取全量药品做计数，会被缺省 20 条截断。
+
+修完（类型补字段、M4 改依赖 `listActiveMedicines`）重评第 8 轮：**blocking 1**。这次剩下的是
+`§5.1 F5` 的第 3 步还写着 `listMedicines`——散文与约束相反。改完第 9 轮：9/9 ready、0 blocking。
+
+这次事故的产出比「修好」本身值钱：
+
+- 0.3.21 `PAGINATION_MODE_CONFLICT`：同一路由同时声明 page 与 cursor 两套分页。
+- 0.3.22 `QUERY_PARAM_UNMAPPED`：查询参数在 handler 的参数类型里没有同名字段。把上面那份 plan 还原成
+  「类型少两个字段」的状态重跑，工具会自己报
+  `GET /api/medicines declares page, pageSize but MedicineQuery has no such field`——正好是第 7 轮人工抓到的
+  那条 blocking。也就是说，这类「改了 3 处漏 1 处」从人力问题变成了机检问题。
+- 仍未机检的部分：散文（`flows[].steps[].note`、约束里的兜底句）与契约相反——第 8 轮那条就是它。
+
+## 实现切片（M1 + M2）
+
+- M1（core）由独立实现者写 9 个文件，4 条 AC 全过；M2（catalog）3 个文件、5 条 AC 全过（含分页）。
+- `impl_gate_record modules=["M1","M2"]` → `PASS 9 / FAIL 0`，`.impl-gate/ac-evidence.json` 里
+  `AC-M1-1…AC-M2-5` 与 SPEC §6 编号逐条对应（0.3.19 的 `ref` 字段）。
+- 两名实现者各自拍板了 14 与 16 处文档没写的细节（长度上限、patch 的 undefined 语义、非法 id 用 404、
+  LIKE 转义、软删除不刷 `updated_at`……），这些正是「文档还不够厚」的清单，可回灌成约束或机检。
