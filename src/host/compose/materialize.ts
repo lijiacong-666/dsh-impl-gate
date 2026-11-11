@@ -56,6 +56,7 @@ export interface ComposeWarning {
     | 'QUERY_DEFAULT_UNSTATED'
     | 'AC_FIELD_UNKNOWN'
     | 'UNIT_MISSING'
+  | 'ENV_KEY_UNDECLARED'
   count: number
   items: string[]
 }
@@ -229,6 +230,22 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (unitless.length > 0) out.push({ code: 'UNIT_MISSING', count: unitless.length, items: unitless.slice(0, 10) })
+  // A runtime command that sets NAME=value is declaring an env key; if globals.envKeys
+  // never lists it, whoever deploys has to guess where the value comes from.
+  const declaredEnv = new Set(plan.globals?.envKeys ?? [])
+  const undeclaredEnv = new Set<string>()
+  const runtime = plan.runtime ?? {}
+  for (const command of [runtime.start, runtime.health, runtime.migrate, runtime.rollback]) {
+    if (!command) continue
+    for (const match of command.matchAll(/\b([A-Z][A-Z0-9_]{2,})\s*=/g)) {
+      const name = match[1]
+      if (!name) continue
+      if (!declaredEnv.has(name)) undeclaredEnv.add(name)
+    }
+  }
+  if (undeclaredEnv.size > 0) {
+    out.push({ code: 'ENV_KEY_UNDECLARED', count: undeclaredEnv.size, items: [...undeclaredEnv].slice(0, 10) })
+  }
   const referenced = new Set<string>()
   for (const module of plan.modules) {
     for (const text of module.constraints ?? []) {

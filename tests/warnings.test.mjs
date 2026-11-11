@@ -485,3 +485,13 @@ test('UNIT_MISSING flags magnitudes without a unit, and respects name suffixes',
   plan.types.find((type) => type.name === 'Shipment').fields[0].unit = '箱'
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'UNIT_MISSING'))
 })
+test('ENV_KEY_UNDECLARED flags a runtime command that sets an env key nobody declared', () => {
+  const plan = basePlan()
+  plan.runtime = { start: 'APP_PORT=3000 node server.js' }
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'ENV_KEY_UNDECLARED')
+  assert.equal(warning?.count, 1)
+  assert.deepEqual(warning?.items, ['APP_PORT'])
+
+  plan.globals.envKeys.push('APP_PORT')
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'ENV_KEY_UNDECLARED'))
+})
