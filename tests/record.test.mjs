@@ -169,3 +169,17 @@ test('recording one module keeps evidence produced for the others', () => {
   assert.equal(stored.summary.total, 3)
   fs.rmSync(root, { recursive: true, force: true })
 })
+
+test('each evidence row records the runner and the working directory', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-gate-record-where-'))
+  fs.mkdirSync(path.join(dir, 'tasks'), { recursive: true })
+  fs.writeFileSync(path.join(dir, 'compose-plan.json'), JSON.stringify(basePlan(), null, 2), 'utf8')
+  const result = await recordAcceptance(dir, { timeoutMs: 30000 })
+  assert.equal(result.ok, true)
+  const first = result.items?.[0]
+  assert.equal(first?.runner, 'node')
+  assert.equal(first?.cwd, dir)
+  const doc = fs.readFileSync(path.join(dir, TASKS_EVIDENCE_REL), 'utf8')
+  assert.match(doc, /runner=node/)
+  assert.match(doc, /cwd=/)
+})

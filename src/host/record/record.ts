@@ -50,6 +50,10 @@ export interface EvidenceItem {
   durationMs: number
   tail: string
   reason?: string
+  /** ??????????????????? implRoot ???????? */
+  cwd?: string
+  /** ??????pnpm/node/python????????????????? */
+  runner?: string
 }
 
 export interface RecordSummary {
@@ -169,11 +173,11 @@ export function recordAcceptance(outDirRaw: string, options: RecordOptions = {})
       }
       const runner = runnerOf(command)
       if (runner === null || !ALLOWED_RUNNERS.has(runner)) {
-        items.push({ id: acceptance.id, module: module.id, command, status: 'SKIPPED', exitCode: null, durationMs: 0, tail: '', reason: `RUNNER_NOT_ALLOWED (${runner ?? 'unknown'})` })
+        items.push({ id: acceptance.id, module: module.id, command, status: 'SKIPPED', exitCode: null, durationMs: 0, tail: '', reason: `RUNNER_NOT_ALLOWED (${runner ?? 'unknown'})`, cwd: implRoot, runner: runner ?? 'unknown' })
         continue
       }
       if (options.dryRun === true) {
-        items.push({ id: acceptance.id, module: module.id, command, status: 'SKIPPED', exitCode: null, durationMs: 0, tail: '', reason: 'DRY_RUN' })
+        items.push({ id: acceptance.id, module: module.id, command, status: 'SKIPPED', exitCode: null, durationMs: 0, tail: '', reason: 'DRY_RUN', cwd: implRoot, runner: runner ?? 'unknown' })
         continue
       }
 
@@ -191,7 +195,7 @@ export function recordAcceptance(outDirRaw: string, options: RecordOptions = {})
       const timedOut = result.error !== undefined && (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT'
       const tail = tailOf(result.stdout, result.stderr, maxTailLines)
       if (timedOut) {
-        items.push({ id: acceptance.id, module: module.id, command, status: 'FAIL', exitCode, durationMs, tail, reason: `TIMEOUT after ${timeoutMs}ms` })
+        items.push({ id: acceptance.id, module: module.id, command, status: 'FAIL', exitCode, durationMs, tail, reason: `TIMEOUT after ${timeoutMs}ms`, cwd: implRoot, runner: runner ?? 'unknown' })
         continue
       }
       items.push({
@@ -201,6 +205,8 @@ export function recordAcceptance(outDirRaw: string, options: RecordOptions = {})
         status: exitCode === 0 ? 'PASS' : 'FAIL',
         exitCode,
         durationMs,
+        cwd: implRoot,
+        runner: runner ?? 'unknown',
         tail,
         ...(exitCode === 0 ? {} : { reason: `exit:${exitCode ?? 'null'}` }),
       })
@@ -307,6 +313,13 @@ export function renderEvidenceDoc(input: {
     for (const item of failed) {
       lines.push('')
       lines.push(`### ${item.id}（${item.module}）— ${item.reason ?? 'FAIL'}`)
+      lines.push('')
+      if (item.command !== '') lines.push(`命令：\`${item.command}\``)
+      if (item.runner !== undefined || item.cwd !== undefined) {
+        lines.push(
+          `执行：runner=${item.runner ?? 'unknown'}，cwd=${item.cwd ?? '（未记录）'}，exit=${item.exitCode === null ? '（无）' : item.exitCode}`
+        )
+      }
       lines.push('')
       lines.push('```')
       lines.push(item.tail === '' ? '（没有输出）' : item.tail)
