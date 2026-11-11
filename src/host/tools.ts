@@ -52,7 +52,15 @@ export interface CheckPayload {
   /** Set when compose-plan.json no longer matches ownership.json. */
   designStale?: string
   /** Present when impl_gate_record has run against this implRoot. */
-  implementation?: { pass: number; fail: number; skipped: number; total: number; generatedAt: string; stale: boolean }
+  implementation?: {
+    pass: number
+    fail: number
+    skipped: number
+    total: number
+    generatedAt: string
+    stale: boolean
+    coverage?: { declared: number; recorded: number; missing: string[] }
+  }
   /** Present when impl_gate_review has recorded at least one round. */
   review?: { round: number; reviewer: string; ready: number; clarify: number; blocked: number; blocking: number; stale: boolean; staleField: 'plan' | 'spec' | '' }
   /** How review verdicts and implementation evidence line up (0.4.4). */
@@ -257,7 +265,15 @@ function designStaleness(implRoot: string): string | undefined {
  * Surface it from check so "design is fine, implementation is 12/21" is one call
  * instead of two, and flag evidence produced against an older plan.
  */
-function implementationEvidence(implRoot: string): { pass: number; fail: number; skipped: number; total: number; generatedAt: string; stale: boolean } | undefined {
+export function implementationEvidence(implRoot: string): {
+  pass: number
+  fail: number
+  skipped: number
+  total: number
+  generatedAt: string
+  stale: boolean
+  coverage: { declared: number; recorded: number; missing: string[] }
+} | undefined {
   const evidenceFile = path.join(implRoot, '.impl-gate', 'ac-evidence.json')
   try {
     if (!fs.existsSync(evidenceFile)) return undefined
@@ -265,11 +281,39 @@ function implementationEvidence(implRoot: string): { pass: number; fail: number;
       planSha256?: unknown
       generatedAt?: unknown
       summary?: { pass?: unknown; fail?: unknown; skipped?: unknown; total?: unknown }
+      items?: Array<{ id?: unknown; ref?: unknown }>
     }
     const summary = stored.summary ?? {}
     const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
     const planFile = path.join(implRoot, 'compose-plan.json')
     const current = fs.existsSync(planFile) ? createHash('sha256').update(fs.readFileSync(planFile)).digest('hex') : ''
+    // 0.4.6: "12/21 AC covered" — partial implementations used to look complete
+    // because only the recorded rows were counted.
+    let coverage = { declared: 0, recorded: 0, missing: [] as string[] }
+    if (fs.existsSync(planFile)) {
+      const plan = JSON.parse(fs.readFileSync(planFile, 'utf8')) as {
+        modules?: Array<{ id?: unknown; acceptance?: Array<{ id?: unknown }> }>
+      }
+      const got = new Set<string>()
+      for (const item of stored.items ?? []) {
+        if (typeof item.id === 'string') got.add(item.id)
+        if (typeof item.ref === 'string') got.add(item.ref)
+      }
+      const missing: string[] = []
+      let declared = 0
+      for (const module of plan.modules ?? []) {
+        const moduleId = typeof module.id === 'string' ? module.id : ''
+        const items = module.acceptance ?? []
+        for (let index = 0; index < items.length; index += 1) {
+          const id = items[index]?.id
+          if (typeof id !== 'string' || id.length === 0) continue
+          declared += 1
+          const ref = moduleId.length > 0 ? `AC-${moduleId}-${index + 1}` : ''
+          if (!got.has(id) && !(ref.length > 0 && got.has(ref))) missing.push(id)
+        }
+      }
+      coverage = { declared, recorded: declared - missing.length, missing }
+    }
     return {
       pass: num(summary.pass),
       fail: num(summary.fail),
@@ -277,6 +321,7 @@ function implementationEvidence(implRoot: string): { pass: number; fail: number;
       total: num(summary.total),
       generatedAt: typeof stored.generatedAt === 'string' ? stored.generatedAt : '',
       stale: current !== '' && typeof stored.planSha256 === 'string' && stored.planSha256 !== '' && stored.planSha256 !== current,
+      coverage,
     }
   } catch {
     return undefined
@@ -580,6 +625,15 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
   if (payload.implementation !== undefined) {
     const impl = payload.implementation
     lines.push(`implementation evidence: PASS ${impl.pass} / FAIL ${impl.fail} / SKIPPED ${impl.skipped} (${impl.total} AC) — recorded ${impl.generatedAt === '' ? 'unknown time' : impl.generatedAt}`)
+    const coverage = impl.coverage
+    if (coverage !== undefined && coverage.declared > 0) {
+      const missing = coverage.missing
+      const shown = missing.slice(0, 6).join(', ')
+      const tail = missing.length > 6 ? `, +${missing.length - 6} more` : ''
+      lines.push(
+        `implementation coverage: ${coverage.recorded}/${coverage.declared} AC recorded${missing.length > 0 ? ` — missing ${shown}${tail}` : ''}`,
+      )
+    }
     if (impl.stale) lines.push('these AC results were produced against an older compose-plan.json; re-run impl_gate_record')
   }
   if (payload.review !== undefined) {
@@ -661,6 +715,12 @@ export function distributionReadiness(payload: CheckPayload): { ok: boolean; rea
   const reasons: string[] = []
   if (payload.review === undefined) reasons.push('no review round has been recorded')
   if (payload.implementation === undefined) reasons.push('no implementation evidence has been recorded')
+  const coverage = payload.implementation?.coverage
+  if (coverage !== undefined && coverage.missing.length > 0) {
+    const shown = coverage.missing.slice(0, 4).join(', ')
+    const tail = coverage.missing.length > 4 ? `, +${coverage.missing.length - 4} more` : ''
+    reasons.push(`implementation coverage ${coverage.recorded}/${coverage.declared} — missing ${shown}${tail}`)
+  }
   if (payload.consistency !== undefined) {
     for (const reason of payload.consistency.reasons) {
       if (!reasons.includes(reason)) reasons.push(reason)
@@ -1175,6 +1235,16 @@ const checkOutputSchema = {
         total: { type: 'number' },
         generatedAt: { type: 'string' },
         stale: { type: 'boolean' },
+        coverage: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            declared: { type: 'number' },
+            recorded: { type: 'number' },
+            missing: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['declared', 'recorded', 'missing'],
+        },
       },
       required: ['pass', 'fail', 'skipped', 'total', 'generatedAt', 'stale'],
     },

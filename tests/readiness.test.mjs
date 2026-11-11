@@ -60,3 +60,15 @@ test('readiness: reasons are not duplicated', () => {
   )
   assert.deepEqual(verdict.reasons, [reason])
 })
+
+test('readiness: partial coverage blocks hand-over', () => {
+  const verdict = distributionReadiness(
+    payload({
+      review,
+      implementation: { ...evidence, coverage: { declared: 3, recorded: 2, missing: ['AC-M1-1'] } },
+      consistency: { ok: true, reasons: [] },
+    }),
+  )
+  assert.equal(verdict.ok, false)
+  assert.deepEqual(verdict.reasons, ['implementation coverage 2/3 — missing AC-M1-1'])
+})
