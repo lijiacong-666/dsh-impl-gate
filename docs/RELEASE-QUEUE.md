@@ -4,7 +4,7 @@
 
 ## 结论
 
-**只批最新一版，其余 Reject。** 当前最新是 `0.4.43`（stage `b5183bec`）。
+**只批最新一版，其余 Reject。** 当前最新是 `0.4.44`——stage 列表里没有版本号，id 最大的那个就是它。
 
 理由：npm 的 `latest` 只能指向一个版本；每个版本的 tarball 都包含此前全部改动，批十个等于把审核页拖长十倍、且中间版本永远不会有独立价值。
 
@@ -26,10 +26,10 @@ node scripts/release-check.mjs      # 版本/tag/notes/tarball 全对才输出 p
 
 ## 顺序
 
-1. 在 npmjs **Staged Packages** 里 Reject 掉 `0.4.0`–`0.4.42`（可选，只是清理）
-2. Approve `0.4.43`，通过通行密钥验证
-3. 核对：`npm view dsh-impl-gate version dist.shasum` 应为 `0.4.43` + 本地 `npm pack --dry-run --json` 的 shasum
-4. 桌面 profile 升级：`dsh plugin --profile desktop add dsh-impl-gate@0.4.43`
+1. 在 npmjs **Staged Packages** 里 Reject 掉旧于最新一版的那些（可选，只是清理）
+2. Approve 最新一版（`0.4.44`），通过通行密钥验证
+3. 核对：`npm view dsh-impl-gate version dist.shasum` 应为 `0.4.44` + 本地 `node scripts/release-check.mjs` 打印的 tarball 信息
+4. 桌面 profile 升级：`dsh plugin --profile desktop add dsh-impl-gate@0.4.44`
 5. 重载后确认工具列表里有七个 `impl_gate_*`，并跑一次 `impl_gate_check`
 
 ## 为什么队列会这么长
