@@ -525,3 +525,14 @@ test('HTTP_RES_MISMATCH compares the declared response with the handler return t
   plan.http[0].handler = 'registerRoutes'
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'HTTP_RES_MISMATCH'))
 })
+test('HTTP_REQ_MISMATCH compares the declared request body with the handler parameter', () => {
+  const plan = basePlan()
+  const target = plan.modules.flatMap((module) => module.exposes).find((entry) => entry.signature.startsWith('login('))
+  target.signature = 'login(input: TokenPair): Promise<LoginInput>'
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'HTTP_REQ_MISMATCH')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /declares req LoginInput, handler login takes TokenPair/)
+
+  plan.http[0].method = 'GET'
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'HTTP_REQ_MISMATCH'))
+})

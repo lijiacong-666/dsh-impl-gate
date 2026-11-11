@@ -60,6 +60,7 @@ export interface ComposeWarning {
   | 'UNIT_INCONSISTENT'
   | 'HTTP_NO_HOST'
   | 'HTTP_RES_MISMATCH'
+  | 'HTTP_REQ_MISMATCH'
   count: number
   items: string[]
 }
@@ -742,6 +743,7 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   // caller's code cannot compile against.
   const simpleType = /^([A-Za-z_][A-Za-z0-9_]*)(\[\])?$/
   const resMismatch: string[] = []
+  const norm = (value: string): string => value.replace(/\s+/g, '')
   for (const route of plan.http ?? []) {
     const res = (route.res ?? '').trim()
     if (res === 'void' || res === '') continue
@@ -761,6 +763,31 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   }
   if (resMismatch.length > 0) {
     out.push({ code: 'HTTP_RES_MISMATCH', count: resMismatch.length, items: resMismatch.slice(0, 10) })
+  }
+
+  // The mirror of the above for request bodies: a route that declares `req: X` but whose
+  // handler takes no parameter (or a different single parameter) cannot receive it.
+  const reqMismatch: string[] = []
+  for (const route of plan.http ?? []) {
+    const req = (route.req ?? '').trim()
+    if (req === '' || req === '（无）' || /^register/i.test(route.handler)) continue
+    // Only methods with a body have a meaningful `req`; GET/DELETE declaring one is a
+    // modelling mistake of its own kind (query params belong in `http[].query`).
+    if (!['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase())) continue
+    const module = plan.modules.find((entry) => entry.id === route.module)
+    const expose = (module?.exposes ?? []).find((entry) => entry.signature.trim().startsWith(`${route.handler}(`))
+    if (!expose) continue
+    const inside = expose.signature.slice(expose.signature.indexOf('(') + 1, expose.signature.indexOf('):'))
+    const params = inside.split(',').map((part) => part.trim()).filter(Boolean)
+    if (params.length !== 1) continue
+    const typeOfParam = params[0]?.slice(params[0].indexOf(':') + 1).trim() ?? ''
+    if (!simpleType.test(req) || !simpleType.test(typeOfParam)) continue
+    if (norm(req) !== norm(typeOfParam)) {
+      reqMismatch.push(`${route.method} ${route.path} declares req ${req}, handler ${route.handler} takes ${typeOfParam}`)
+    }
+  }
+  if (reqMismatch.length > 0) {
+    out.push({ code: 'HTTP_REQ_MISMATCH', count: reqMismatch.length, items: reqMismatch.slice(0, 10) })
   }
 
   // A module with no route of its own cannot pass an HTTP-level assertion: the
