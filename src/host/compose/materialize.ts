@@ -59,6 +59,7 @@ export interface ComposeWarning {
   | 'ENV_KEY_UNDECLARED'
   | 'UNIT_INCONSISTENT'
   | 'HTTP_NO_HOST'
+  | 'HTTP_RES_MISMATCH'
   count: number
   items: string[]
 }
@@ -734,6 +735,32 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
       count: routes.length,
       items: routes.slice(0, 10).map((route) => `${route.method} ${route.path}`),
     })
+  }
+
+  // The declared response type and the handler's return type must agree: a route that
+  // declares `WorkItem` while its handler returns `WorkItem[]` is a contract that the
+  // caller's code cannot compile against.
+  const simpleType = /^([A-Za-z_][A-Za-z0-9_]*)(\[\])?$/
+  const resMismatch: string[] = []
+  for (const route of plan.http ?? []) {
+    const res = (route.res ?? '').trim()
+    if (res === 'void' || res === '') continue
+    // A registrar (`registerXxxRoutes`) installs many routes and returns nothing; its
+    // return type says nothing about any single route's response body.
+    if (/^register/i.test(route.handler)) continue
+    const module = plan.modules.find((entry) => entry.id === route.module)
+    const expose = (module?.exposes ?? []).find((entry) => entry.signature.trim().startsWith(`${route.handler}(`))
+    if (!expose) continue
+    const afterParams = expose.signature.slice(expose.signature.indexOf('):') + 2).trim()
+    const unwrapped = afterParams.replace(/^Promise<(.+)>$/, '$1').trim()
+    if (!simpleType.test(res) || !simpleType.test(unwrapped)) continue
+    const norm = (value: string): string => value.replace(/\s+/g, '')
+    if (norm(res) !== norm(unwrapped)) {
+      resMismatch.push(`${route.method} ${route.path} declares ${res}, handler ${route.handler} returns ${unwrapped}`)
+    }
+  }
+  if (resMismatch.length > 0) {
+    out.push({ code: 'HTTP_RES_MISMATCH', count: resMismatch.length, items: resMismatch.slice(0, 10) })
   }
 
   // A module with no route of its own cannot pass an HTTP-level assertion: the

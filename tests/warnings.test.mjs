@@ -514,3 +514,14 @@ test('HTTP_NO_HOST flags routes when no module exposes a server entry point', ()
   plan.modules[0].exposes.push({ kind: 'fn', signature: 'buildServer(): HttpApp' })
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'HTTP_NO_HOST'))
 })
+test('HTTP_RES_MISMATCH compares the declared response with the handler return type', () => {
+  const plan = basePlan()
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'HTTP_RES_MISMATCH'))
+  plan.http[0].res = 'TokenPair[]'
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'HTTP_RES_MISMATCH')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /declares TokenPair\[\], handler login returns TokenPair/)
+
+  plan.http[0].handler = 'registerRoutes'
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'HTTP_RES_MISMATCH'))
+})
