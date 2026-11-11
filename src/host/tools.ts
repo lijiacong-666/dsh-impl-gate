@@ -850,6 +850,8 @@ export interface ComposeReview {
   playbook: string
   specPath: string
   rubric: string[]
+  /** 0.4.9: ready-to-paste reviewer prompt, so callers stop hand-assembling it. */
+  prompt: string
 }
 
 export interface ComposePayload {
@@ -885,10 +887,21 @@ export const REVIEW_RUBRIC = ['可开工', '需澄清', '不可开工']
  * and in an installed package, so the same resolve works in both.
  */
 export function composeReview(outDir: string): ComposeReview {
+  const root = path.resolve(outDir)
+  const specPath = path.join(root, 'SPEC.md')
+  const prompt = [
+    `你是这份设计文档的独立评审者。只读 ${specPath}，不要读 compose-plan.json、tasks/ 或任何实现代码——那些会替文档回答它没写的东西。`,
+    '对每一个模块给三态判定：可开工 / 需澄清 / 不可开工。判定标准：可开工 = 实施者不用再问任何人就能动手；需澄清 = 开工会上问一句即可；不可开工 = 照文档写不出来。',
+    '「需澄清」「不可开工」必须写清缺什么；证据一律写成 SPEC.md:<行号>，不要写「第 3 节」这类模糊位置。',
+    '重点查自相矛盾与留白：同一概念是否只有一个名字；声明必填的字段在 AC 里是否真传；成功状态码、排序、缺省值、时区是否写死；散文与类型表、http 表是否对得上。',
+    '通过线是 blocked = 0 且 blocking = 0（不要求 100% 可开工）；每轮只核上一轮的 blocking 是否清零，外加有没有新引入的矛盾。',
+    `把判定写回：调用 impl_gate_review，outDir = ${root}，reviewer 写你的标识并注明「只读 SPEC.md」。`,
+  ].join('\n')
   return {
     playbook: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'playbooks', 'review.md'),
-    specPath: path.join(path.resolve(outDir), 'SPEC.md'),
+    specPath,
     rubric: [...REVIEW_RUBRIC],
+    prompt,
   }
 }
 
@@ -1113,6 +1126,11 @@ function renderCompose(_args: unknown, value: unknown): Array<{ type: 'text'; te
     }
     for (const warning of payload.warnings ?? []) {
       lines.push(`warning ${warning.code} (${warning.count}): ${warning.items.join(', ')}`)
+    }
+    const prompt = payload.review?.prompt ?? ''
+    if (prompt.length > 0) {
+      lines.push('review prompt (paste to the reviewer as-is):')
+      for (const line of prompt.split('\n')) lines.push(`  ${line}`)
     }
     return [{ type: 'text', text: lines.join('\n') }]
   }
@@ -1396,8 +1414,9 @@ const composeOutputSchema = {
         playbook: { type: 'string' },
         specPath: { type: 'string' },
         rubric: { type: 'array', items: { type: 'string' } },
+        prompt: { type: 'string' },
       },
-      required: ['playbook', 'specPath', 'rubric'],
+      required: ['playbook', 'specPath', 'rubric', 'prompt'],
     },
     packageMd: { type: 'string' },
     manifestPath: { type: 'string' },
