@@ -114,7 +114,7 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 | `boundaries` | 外部依赖及失败策略 | `{dependency:"postgres",purpose:"存用户",fallback:"启动失败并报错"}` | `{dependency:"db"}` |
 | `globals` | 全局约定/禁止/envKeys/非功能要求，可给统一 `errorShape` | `{conventions:[...],forbidden:[...],envKeys:["DATABASE_URL"],nfr:["登录每 IP 每分钟 10 次","P95 < 300ms"]}` | 省略 envKeys；把限流写成散文 |
 | `data` | 表、字段、建表模块与运行时写入方，至少 1 张 | 见 `playbooks/examples/login.md` | `[]` |
-| `types` | 契约里用到的类型定义（可选）；**跨模块共用的类型必须写 `owner`（哪个模块的文件定义它）** | `{name:"User",kind:"object",owner:"M1",fields:[…]}` | 只写类型名不写字段；共享类型不写 `owner`（实现者会每个模块各造一份） |
+| `types` | 契约里用到的类型定义（可选）；**跨模块共用的类型必须写 `owner`（哪个模块的文件定义它）**；数值字段建议带 `unit`（单位是片、盒、分钟、元…），单位不写进字段名时尤其需要 | `{name:"Medicine",kind:"object",owner:"M1",fields:[{name:"currentQuantity",type:"number",unit:"片"}]}` | 只写类型名不写字段；共享类型不写 `owner`（实现者会每个模块各造一份）；数值字段既无 `unit` 名字里也不带单位（`distanceM` 这类可豁免） |
 | `errors` | 错误码目录（可选，但被引用就必须声明）；建议每条写 `by`（哪个模块抛出它） | `{code:"E_AUTH_INVALID",status:401,when:"密码错误",shape:"{\"error\":{\"code\",\"message\"}}",by:"M1"}` | 只写 `E_` 前缀 |
 | `http` | 对外路由（可选）；`auth` 写明 `public`/`session`/`admin`，无响应体写 `res:"void"`；**成功状态码写 `status`**（不写默认 200、void 默认 204），**契约相关的响应头写 `resHeaders`**，**查询参数写 `query`**（`{name,type,required?}`，不写默认可选）；建议附 `reqExample`/`resExample`（真实 JSON 报文，GET 的示例是查询参数） | `{method:"GET",path:"/sessions",module:"M1",handler:"listSessions",res:"SessionList",auth:"session",status:200,query:[{name:"month",type:"string",required:true}],resHeaders:{"X-Row-Count":"<int>"}}` | 路径不写 `/`；示例用单引号或省略字段名；只写「成功返回 200」这种散文；把查询参数塞进 `req` 类型里让 AC 传 `{}` |
 | `runtime` | 被设计系统怎么运行：`port`/`start`/`health`/`migrate`/`rollback`（可选，但强烈建议） | `{port:"8080",start:"pnpm start",health:"/healthz",migrate:"pnpm migrate"}` | 只写「能跑起来就行」 |
