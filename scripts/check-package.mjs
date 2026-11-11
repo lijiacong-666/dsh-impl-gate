@@ -30,6 +30,8 @@ const required = [
   'docs/CASE-STUDY-pillbox.md',
   'docs/install-specgraph.md',
   'docs/RELEASE-QUEUE.md',
+  'engine/specgraph/__init__.py',
+  'engine/specgraph/checks.py',
 ]
 const allowedPlaybooks = new Set([
   'playbooks/compose.md',

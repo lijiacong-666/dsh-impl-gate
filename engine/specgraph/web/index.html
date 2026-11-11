@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>规格图谱</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◇</span>
+    <span class="brand-name">规格图谱</span>
+    <small id="projname"></small>
+  </div>
+
+  <div class="crumb" id="crumb"><button>项目</button></div>
+  <div class="spacer"></div>
+
+  <div class="status ok" id="status">✓ 校验通过</div>
+
+  <div class="tbgroup">
+    <button class="tool icon" id="btn-undo" title="撤销（Ctrl+Z）" aria-label="撤销">↶</button>
+    <button class="tool icon" id="btn-redo" title="重做（Ctrl+Y）" aria-label="重做">↷</button>
+  </div>
+
+  <div class="tbgroup">
+    <button class="tool icon" id="btn-find" title="搜索模块、条目、正文（Ctrl+K）" aria-label="搜索">⌕</button>
+    <button class="tool" id="btn-exp" title="导出当前节点的 AI 实现指令包">导出指令包</button>
+    <button class="tool" id="btn-ref" title="引用项目外的契约（[[ref]]）">引用外部契约</button>
+    <button class="tool" id="btn-gaps" title="压暗没有问题的方块">只看缺口</button>
+    <button class="tool" id="btn-issues" title="列出全部校验问题">问题 <b id="isscount">0</b></button>
+  </div>
+
+  <div class="tbgroup">
+    <div class="zoom" id="zoom" title="把这一层的模块都放进视野">100%</div>
+    <button class="tool icon" id="btn-dock" title="收起 / 展开左侧栏" aria-label="收起或展开左侧栏">≡</button>
+  </div>
+</header>
+
+<main>
+  <aside id="dock">
+    <div class="tabs">
+      <button data-tab="tree" class="on">项目</button>
+      <button data-tab="lib">模块库</button>
+      <button data-tab="ai">助手</button>
+      <button data-tab="help">怎么用</button>
+    </div>
+
+    <div class="tab-body" id="tab-tree">
+      <div class="proj-head">
+        <div class="proj-name" id="proj-current" title="当前项目">…</div>
+        <button class="proj-switch" id="btn-proj" title="打开或新建一个项目">切换</button>
+      </div>
+      <div class="projlist" id="projlist"></div>
+      <div class="dock-hint">点一个模块就进它的页面；当前层会亮着。</div>
+      <div id="tree"></div>
+    </div>
+
+    <div class="tab-body hidden" id="tab-lib">
+      <div class="dock-label">节点类型</div>
+      <div class="dock-hint">点一个类型，就在当前层新建一个带该标签的空模块。</div>
+      <div id="types" class="typegrid"></div>
+
+      <div class="dock-label">模块模板</div>
+      <div class="dock-hint">把卡片拖进画布，就在当前层新建一个带三段契约的模块。</div>
+      <div id="lib"></div>
+
+      <button class="demo-btn" id="btn-demo">
+        放入「用户中心」示例
+        <small>4 个模块 + 3 条线，放进来就是一张合法的图</small>
+      </button>
+    </div>
+
+    <div class="tab-body hidden" id="tab-ai">
+      <div class="ai-head">
+        <span id="ai-state" class="ai-state">还没配 API Key</span>
+        <button class="proj-switch" id="btn-ai-set" title="填模型地址与 Key">设置</button>
+      </div>
+      <div class="dock-hint">说你要什么，助手把它变成对图谱的改动。它先给计划，你点了执行才落盘；任何一步失败整批撤销。</div>
+      <div class="ai-log" id="ai-log">
+        <div class="ai-empty">
+          <b>可以这样讲：</b><br>
+          「加一个订单服务，提供下单能力，依赖用户信息查档案」<br>
+          「把用户信息的 N1 接到身份校验的 E1 上」<br>
+          「现在图里还缺什么？」
+        </div>
+      </div>
+      <div class="ai-plan hidden" id="ai-plan">
+        <div class="ai-plan-head">准备这样改 <b id="ai-plan-n">0</b> 步 · 点「执行」才写盘</div>
+        <ol id="ai-plan-list"></ol>
+        <div class="row">
+          <button class="ghost" id="ai-cancel">取消</button>
+          <button class="primary" id="ai-run">执行这些改动</button>
+        </div>
+      </div>
+      <div class="ai-input">
+        <textarea id="ai-text" rows="3" placeholder="说要改什么…（Ctrl+Enter 发送）"></textarea>
+        <div class="row">
+          <span class="ai-tip">只改契约与连线，不写代码 · 写砸了可撤销</span>
+          <button class="primary" id="ai-send">发送</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-body hidden" id="tab-help">
+      <div class="help-intro">三条规矩先记住：方块 = 文件夹 + 契约；连线 = 需求被提供满足；出口只有指令包。</div>
+
+      <details class="step" open>
+        <summary><span class="no">01</span>一个方块 = 一个文件夹 + 一份 spec.md</summary>
+        <p>方块左边是「提供」，右边是「需要」，中间（模块页里）是「约束」。这三段就是它的全部契约，不写实现细节。</p>
+      </details>
+
+      <details class="step">
+        <summary><span class="no">02</span>连线 = A 的某条「需要」由 B 的某条「提供」满足</summary>
+        <p>从「需要」右边的圆点拖到对方的「提供」条目上。一条需求恰好由一条提供满足；删掉线，需求就变成红色缺口。</p>
+      </details>
+
+      <details class="step">
+        <summary><span class="no">03</span>双击方块 = 进入模块页</summary>
+        <p>在模块页里加、改、删这个模块自己的三段条目。空白处双击 = 新建模块；拖方块 = 摆位置；Shift + 拖空白 = 框选。</p>
+      </details>
+
+      <details class="step">
+        <summary><span class="no">04</span>顶栏「问题 N」= 校验器的输出</summary>
+        <p>缺口、歧义、越界都在这里，点一条就跳到对应节点。方块左上角出现红三角，说明它有错误。</p>
+      </details>
+
+      <details class="step">
+        <summary><span class="no">05</span>出口只有一个：导出指令包</summary>
+        <p>导出的只有契约，没有代码。把它交给 AI 或同事去实现，实现结果再回来补契约。</p>
+      </details>
+
+      <div class="help-more">
+        想看完整的？点「模块库 → 放入用户中心示例」。<br>
+        不清楚「需求必须闭合」是什么意思？把示例拖出来，删掉一条线，看它变成红色。
+      </div>
+    </div>
+  </aside>
+
+  <div id="stage">
+    <div id="world">
+      <svg id="edges" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="cards"></div>
+    </div>
+
+    <div class="minimap" id="minimap" title="点一下跳到那儿"></div>
+
+    <div id="empty-hint">
+      空白处双击新建模块 · 拖动方块摆位置 · 从「需要」右边的圆点拖到「提供」建立连线<br>
+      不知道从哪开始？从左边「模块库」拖一张卡进来，或直接放入示例。
+    </div>
+  </div>
+
+  <aside id="side"><div class="side-hint">点方块看它的契约。<br>空白处双击 = 新建模块。<br>按住需求项右侧圆点拖到对方提供项 = 建一条连线。</div></aside>
+</main>
+
+<div id="isspanel">
+  <div class="ph"><h3>全部问题</h3><button class="x" id="iss-close" title="关闭">×</button></div>
+  <div class="pl" id="islist"></div>
+</div>
+
+<div id="modal" class="hidden">
+  <div class="sheet">
+    <h3>新建节点</h3>
+    <label>名字<input id="m-name" placeholder="比如：订单服务" autocomplete="off"></label>
+    <div class="seg">
+      <button class="on" data-kind="module">模块</button>
+      <button data-kind="class">类级</button>
+    </div>
+    <label class="cls" hidden>类名<input id="m-class" placeholder="比如：OrderService" autocomplete="off"></label>
+    <label class="cls" hidden>所在文件（可选）<input id="m-file" placeholder="比如：order/service" autocomplete="off"></label>
+    <div class="row">
+      <button class="ghost" id="m-cancel">取消</button>
+      <button class="primary" id="m-ok">创建</button>
+    </div>
+    <div class="err" id="m-err"></div>
+  </div>
+</div>
+
+<div id="refmodal" class="hidden">
+  <div class="sheet">
+    <h3>引用一份外部契约</h3>
+    <div class="sub">填对方<b>模块文件夹</b>的路径（里面有 spec.md）。相对路径从本项目的图算起，也可以是绝对路径。</div>
+    <label>路径<input id="r-path" placeholder="比如：../共享契约/消息中心" autocomplete="off"></label>
+    <div class="row">
+      <button class="ghost" id="ref-cancel">取消</button>
+      <button class="primary" id="r-ok">引用</button>
+    </div>
+    <div class="err" id="ref-err"></div>
+  </div>
+</div>
+
+<div id="expmodal" class="hidden">
+  <div class="sheet wide">
+    <h3 id="exp-title">导出指令包</h3>
+    <div class="sub" id="exp-meta"></div>
+    <div class="exp-warn hidden" id="exp-warn"></div>
+    <pre class="exp-text" id="exp-text"></pre>
+    <div class="row">
+      <button class="ghost" id="exp-cancel">关闭</button>
+      <button class="ghost" id="exp-copy">复制全文</button>
+      <button class="ghost" id="exp-reveal">打开 exports</button>
+      <button class="primary" id="exp-save">存到 exports</button>
+    </div>
+  </div>
+</div>
+
+<div id="projmodal" class="hidden">
+  <div class="sheet">
+    <h3>项目</h3>
+    <div class="sub">一个项目就是一个文件夹，里面放 <b>spec.md</b> 与 <b>graph.toml</b>。新建时会建好文件夹和一份根契约。</div>
+    <label>项目文件夹（绝对路径）<input id="p-path" placeholder="比如：D:\\图纸\\我的系统" autocomplete="off"></label>
+    <div class="row">
+      <button class="ghost" id="p-cancel">取消</button>
+      <button class="ghost" id="p-open">打开</button>
+      <button class="primary" id="p-new">新建项目</button>
+    </div>
+    <div class="err" id="p-err"></div>
+  </div>
+</div>
+
+<div id="aimodal" class="hidden">
+  <div class="sheet">
+    <h3>助手设置</h3>
+    <div class="sub">走 OpenAI 兼容接口。Key 只存在本机 <b>~/.specgraph/ai.json</b>，不会写进图谱。</div>
+    <label>接口地址<input id="a-base" placeholder="https://api.deepseek.com" autocomplete="off"></label>
+    <label>模型<input id="a-model" placeholder="deepseek-chat" autocomplete="off"></label>
+    <label>API Key<input id="a-key" type="password" placeholder="sk-..." autocomplete="off"></label>
+    <div class="row">
+      <button class="ghost" id="a-cancel">取消</button>
+      <button class="primary" id="a-save">保存</button>
+    </div>
+    <div class="err" id="a-err"></div>
+  </div>
+</div>
+
+<div id="find" class="hidden">
+  <div class="find-box">
+    <input id="find-q" placeholder="搜模块名、条目标题、契约正文…" autocomplete="off">
+    <div class="find-list" id="find-list"></div>
+    <div class="find-foot"><span>↑↓ 选择 · Enter 跳过去 · Esc 关掉</span><span id="find-n"></span></div>
+  </div>
+</div>
+
+<div id="renmodal" class="hidden">
+  <div class="sheet">
+    <h3>给模块改名</h3>
+    <div class="sub">文件夹、<b>graph.toml</b> 里指向它的连线、画布位置会一起改，撤销可还原。</div>
+    <div class="sub" id="r-old"></div>
+    <label>新名字<input id="r-name" autocomplete="off"></label>
+    <div class="row">
+      <button class="ghost" id="r-cancel">取消</button>
+      <button class="primary" id="r-save">改名</button>
+    </div>
+    <div class="err" id="r-err"></div>
+  </div>
+</div>
+
+<div id="ctx" class="hidden"></div>
+<div id="toast" class="hidden"></div>
+
+<script src="/logic.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

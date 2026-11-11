@@ -26,7 +26,7 @@ export type { EvidenceItem, EvidenceStatus, RecordOptions, RecordOutcome, Record
 export { renderChecklistTemplate, mergeChecklist, CHECKLIST_REL } from './compose/checklist-template.js'
 export { renderMappingTemplate, MAPPING_REL } from './compose/mapping-template.js'
 export { loadChecks, checksFilePath } from './checks.js'
-export { resolveSpecgraphEnv, preflightSpecgraph, findSpecgraphHome } from './specgraph.js'
+export { resolveSpecgraphEnv, preflightSpecgraph, findSpecgraphHome, bundledEngineHome } from './specgraph.js'
 export { computeWaves } from './init/waves.js'
 export { initTasks } from './init/init.js'
 export { renderTaskCard, renderTasksDoc, buildCardsJson, cardPathOf } from './init/cards.js'

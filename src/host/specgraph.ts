@@ -4,6 +4,7 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export class SpecgraphError extends Error {
   readonly code: string
@@ -132,9 +133,27 @@ export interface SpecgraphEnv {
 }
 
 /**
+ * The specgraph package that ships inside this npm package (`engine/specgraph`).
+ * A fresh install then only needs Python >= 3.11 — the marketplace reviewer
+ * rejected the earlier behaviour of "install the plugin, get
+ * PYTHON_ENV_MISSING on the first check".
+ */
+export function bundledEngineHome(): string | undefined {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const root = path.resolve(here, '..')
+    const candidate = path.join(root, 'engine')
+    if (fs.existsSync(path.join(candidate, 'specgraph', '__init__.py'))) return candidate
+  } catch {
+    /* import.meta.url is unavailable when bundled as CJS */
+  }
+  return undefined
+}
+
+/**
  * Resolves the python environment shared by `impl_gate_check` and
  * `impl_gate_compose` materialize:
- *   explicit home > walk-up from startDirs > SPECGRAPH_HOME.
+ *   explicit home > walk-up from startDirs > SPECGRAPH_HOME > bundled engine.
  * A home always sets PYTHONPATH so an uninstalled source checkout works.
  */
 export function resolveSpecgraphEnv(input: SpecgraphEnvInput): SpecgraphEnv {
@@ -163,6 +182,11 @@ export function resolveSpecgraphEnv(input: SpecgraphEnvInput): SpecgraphEnv {
       probed.push(found === undefined ? `SPECGRAPH_HOME=${fromEnv}` : `SPECGRAPH_HOME=${fromEnv} -> hit`)
       if (found !== undefined) home = found
     }
+  }
+  if (home === undefined) {
+    const bundled = bundledEngineHome()
+    probed.push(bundled === undefined ? 'bundled engine: not found' : `bundled engine: ${bundled}`)
+    if (bundled !== undefined) home = bundled
   }
   const env: NodeJS.ProcessEnv = { ...baseEnv }
   if (home !== undefined) {
@@ -207,7 +231,7 @@ export async function preflightSpecgraph(environment: SpecgraphEnv, timeoutMs: n
   }
   throw new SpecgraphError(
     'PYTHON_ENV_MISSING',
-    `python cannot import specgraph; set PYTHONPATH to the spec-graph root or configure specgraphCwd (probed: ${formatProbed(environment.probed)})`,
+    `python cannot import specgraph, and the bundled engine was not usable; install Python >= 3.11 or point specgraphCwd/pythonPath at a specgraph checkout (probed: ${formatProbed(environment.probed)})`,
     lastError.slice(-2000),
   )
 }

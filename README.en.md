@@ -22,6 +22,8 @@ Turns the 32 IMPL-GATE assertions into three callable DSH tools: give it a spec-
 - It does not judge GUIs: M7 / M10 are always NOT-RUN with `GUI_REQUIRES_MANUAL_CHECK`.
 - It does not inline or read specgraph internals; when they are unavailable it returns an error code.
 
+> **The engine ships with the plugin (0.4.45+).** Every materialize and check calls python -m specgraph, and the npm package now bundles a pinned copy under engine/specgraph/ — a fresh install only needs Python >= 3.11. A local spec-graph checkout still wins; the A1 evidence records specgraph_home=. See [docs/install-specgraph.md](docs/install-specgraph.md).
+
 ## Minimal example
 
 ```sh

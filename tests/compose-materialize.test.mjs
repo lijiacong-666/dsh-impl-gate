@@ -259,7 +259,7 @@ test('missing specgraph package is PYTHON_ENV_MISSING and writes nothing', { ski
     })
     assert.equal(result.ok, false)
     assert.equal(result.code, 'PYTHON_ENV_MISSING')
-    assert.match(result.message, /python cannot import specgraph; set PYTHONPATH to the spec-graph root or configure specgraphCwd \(probed: /)
+    assert.match(result.message, /python cannot import specgraph, and the bundled engine was not usable/)
     assert.deepEqual(listing(out), before)
   } finally {
     fs.rmSync(fakeDir, { recursive: true, force: true })

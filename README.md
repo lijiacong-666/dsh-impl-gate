@@ -58,7 +58,7 @@ dsh plugin --profile headless add dsh-impl-gate
 
 安装后重启 DSH（桌面版请重启应用），刷新页面。命令会装到你平时使用的 DSH；如果你设置了自己的 `DSH_HOME`，请在同一个环境中运行。从源码安装用于开发调试，见 [docs/development.md](docs/development.md)。
 
-> **先装 specgraph**：materialize 与 check 都靠 python -m specgraph 校验契约图，插件本身不重写它。没装时 impl_gate_compose 会明确返回 PYTHON_ENV_MISSING（而不是装作成功）。安装方式见 [docs/install-specgraph.md](docs/install-specgraph.md)。
+> **引擎随插件自带（0.4.45 起）**：materialize 与 check 都靠 `python -m specgraph` 校验契约图，插件本身不重写它。npm 包里已带一份固定版本的引擎（`engine/specgraph/`），所以**只需要 Python ≥ 3.11**，不必另外安装或 clone。你本地已有的 spec-graph 检出优先；找不到时用自带引擎，`A1` 证据会带 `specgraph_home=<路径>`。缺 Python 时 `impl_gate_compose` 明确返回 `PYTHON_ENV_MISSING`（而不是装作成功）。细节见 [docs/install-specgraph.md](docs/install-specgraph.md)。
 
 ## 实测：会议室预订
 
