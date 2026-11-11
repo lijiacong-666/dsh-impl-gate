@@ -26,3 +26,10 @@ test('prompt sets the pass line and the way back', () => {
 test('prompt is stable for the same outDir', () => {
   assert.equal(composeReview(path.join('C:', 'proj', 'demo')).prompt, review.prompt)
 })
+test('prompt carries the twelve silence questions that machines cannot answer', () => {
+  for (const marker of ['单位', '缺省值', '排序', '状态码', 'UTC', '事务', '幂等', '长度上限', '批量', '空态', '测试命令']) {
+    assert.match(review.prompt, new RegExp(marker))
+  }
+  const numbered = review.prompt.split('\n').filter((line) => /^\d+\. /.test(line))
+  assert.equal(numbered.length, 12)
+})
