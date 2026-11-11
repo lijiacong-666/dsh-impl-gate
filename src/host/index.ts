@@ -7,7 +7,7 @@ export { buildTools } from './tools.js'
 // Exported for unit tests that must not spawn specgraph (A4 set rules).
 export { auditChecklist, parseChecklist } from './checklist.js'
 // Exported for unit tests of the cached-run selectors (report / verify_contract).
-export { buildReport, buildVerifyContract, coverageStatement, rememberRun, runCheck, buildCompose, buildInit, composeReview, reviewSummary, compareReviewAndEvidence } from './tools.js'
+export { buildReport, buildVerifyContract, coverageStatement, rememberRun, runCheck, buildCompose, buildInit, composeReview, reviewSummary, compareReviewAndEvidence, distributionReadiness } from './tools.js'
 // Exported for unit tests of the compose plan schema (G1) without a host.
 export { emptyPlan, missingSlots, validatePlan, stripMeta } from './compose/plan.js'
 export { renderDraft } from './compose/draft.js'

@@ -609,6 +609,7 @@ export interface ReportPayload {
   summary: string
   checklist: Array<{ id: string; status: string; evidence: string; reason?: string }>
   uncovered: string[]
+  readiness: { ok: boolean; reasons: string[] }
 }
 
 export interface VerifyPayload {
@@ -650,6 +651,22 @@ const A_IDS = ['A1', 'A2', 'A3', 'A4', 'A5'] as const
 
 function evidenceFor(payload: CheckPayload, id: string): string {
   return payload.evidence.find((entry) => entry.id === id)?.text ?? ''
+}
+
+/**
+ * 0.4.5: "can I hand this document to an implementer?" — one verdict instead of
+ * making the reader combine review + evidence + consistency by hand.
+ */
+export function distributionReadiness(payload: CheckPayload): { ok: boolean; reasons: string[] } {
+  const reasons: string[] = []
+  if (payload.review === undefined) reasons.push('no review round has been recorded')
+  if (payload.implementation === undefined) reasons.push('no implementation evidence has been recorded')
+  if (payload.consistency !== undefined) {
+    for (const reason of payload.consistency.reasons) {
+      if (!reasons.includes(reason)) reasons.push(reason)
+    }
+  }
+  return { ok: reasons.length === 0, reasons }
 }
 
 export function buildReport(rawArgs: unknown): ReportPayload | ToolFailure {
@@ -694,6 +711,7 @@ export function buildReport(rawArgs: unknown): ReportPayload | ToolFailure {
     summary: `PASS ${payload.passed.length} / FAIL ${payload.failed.length} / NOT-RUN ${payload.notRun.length} (32)`,
     checklist,
     uncovered,
+    readiness: distributionReadiness(payload),
   }
 }
 
@@ -746,6 +764,15 @@ function renderReport(_args: unknown, value: unknown): Array<{ type: 'text'; tex
   ]
   const failed = (payload.checklist ?? []).filter((row) => row.status === 'FAIL').map((row) => row.id)
   if (failed.length > 0) lines.push(`FAIL: ${failed.join(', ')}`)
+  const readiness = payload.readiness
+  if (readiness !== undefined) {
+    if (readiness.ok) {
+      lines.push('readiness: ready to hand over — review passed, evidence recorded, no contradiction')
+    } else {
+      lines.push(`readiness: not ready — ${readiness.reasons.length} reason(s)`)
+      for (const reason of readiness.reasons) lines.push(`- ${reason}`)
+    }
+  }
   return [{ type: 'text', text: lines.filter((line) => line.length > 0).join('\n') }]
 }
 
@@ -1067,6 +1094,15 @@ const reportOutputSchema = {
       },
     },
     uncovered: { type: 'array', items: { type: 'string' } },
+    readiness: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ok: { type: 'boolean' },
+        reasons: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['ok', 'reasons'],
+    },
     error: errorSchema,
   },
 }
