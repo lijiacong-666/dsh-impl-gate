@@ -81,6 +81,27 @@ test('verify_contract is ok only when A1–A5 all passed', () => {
   assert.equal(bad.ok, false)
   const a3 = bad.details.find((line) => line.startsWith('A3 '))
   assert.match(a3, /A3 PASS/)
+  // 0.4.7: the delivery checks ride along with the same cached run
+  assert.equal(bad.delivery.ok, false)
+  assert.deepEqual(bad.delivery.checks.map((check) => check.id), ['B1', 'B2', 'B5', 'B7'])
+  assert.ok(bad.delivery.checks.every((check) => check.status === 'NOT-RUN'))
+})
+
+test('verify_contract reports the delivery checks as a group', () => {
+  const runId = 'run-test-delivery'
+  const onlyB1 = ids.filter((id) => id !== 'B1')
+  rememberRun(runId, payload(runId, ['B1', 'B2', 'B5'], [], onlyB1), { B7: 'NOT_IMPLEMENTED' }, 'D:/delivery')
+  const result = buildVerifyContract({ root: 'D:/delivery', runId })
+  assert.equal(result.delivery.ok, false)
+  assert.deepEqual(
+    result.delivery.checks,
+    [
+      { id: 'B1', status: 'PASS' },
+      { id: 'B2', status: 'PASS' },
+      { id: 'B5', status: 'PASS' },
+      { id: 'B7', status: 'NOT-RUN' },
+    ],
+  )
 })
 
 test('verify_contract refuses a run from another root', () => {

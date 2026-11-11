@@ -669,6 +669,7 @@ export interface ReportPayload {
 export interface VerifyPayload {
   ok: boolean
   details: string[]
+  delivery: { ok: boolean; checks: Array<{ id: string; status: string }> }
 }
 
 function selectRun(rawRoot: unknown, rawRunId: unknown): { record: RunRecord } | ToolFailure {
@@ -810,7 +811,16 @@ export function buildVerifyContract(rawArgs: unknown): VerifyPayload | ToolFailu
     return `${id} ${status}${reason} — ${evidence || '(no evidence)'}`
   })
   const ok = A_IDS.every((id) => payload.passed.includes(id))
-  return { ok, details }
+  // 0.4.7: the same cached run already answered the delivery checks (B group);
+  // repeating the call to `check` just to read them was wasted round-trips.
+  const deliveryIds = ['B1', 'B2', 'B5', 'B7'] as const
+  const deliveryStatus = (id: string): string =>
+    payload.passed.includes(id) ? 'PASS' : payload.failed.includes(id) ? 'FAIL' : 'NOT-RUN'
+  const delivery: { ok: boolean; checks: Array<{ id: string; status: string }> } = {
+    ok: deliveryIds.every((id) => payload.passed.includes(id)),
+    checks: deliveryIds.map((id) => ({ id, status: deliveryStatus(id) })),
+  }
+  return { ok, details, delivery }
 }
 
 function renderReport(_args: unknown, value: unknown): Array<{ type: 'text'; text: string }> {
@@ -1131,6 +1141,12 @@ function renderVerify(_args: unknown, value: unknown): Array<{ type: 'text'; tex
   }
   const lines = [`ok=${payload.ok === true}`]
   for (const detail of payload.details ?? []) lines.push(detail)
+  const delivery = payload.delivery
+  if (delivery !== undefined) {
+    const parts = delivery.checks.map((check) => `${check.id} ${check.status}`).join(' / ')
+    lines.push(`delivery contract: ${parts}`)
+    lines.push(delivery.ok ? 'delivery: ok' : 'delivery: not ok — the list above names what is missing')
+  }
   return [{ type: 'text', text: lines.join('\n') }]
 }
 
@@ -1173,6 +1189,23 @@ const verifyOutputSchema = {
   properties: {
     ok: { type: 'boolean' },
     details: { type: 'array', items: { type: 'string' } },
+    delivery: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ok: { type: 'boolean' },
+        checks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { id: { type: 'string' }, status: { type: 'string' } },
+            required: ['id', 'status'],
+          },
+        },
+      },
+      required: ['ok', 'checks'],
+    },
     error: errorSchema,
   },
 }
