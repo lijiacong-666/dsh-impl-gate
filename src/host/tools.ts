@@ -682,6 +682,7 @@ export interface ReportPayload {
   checklist: Array<{ id: string; status: string; evidence: string; reason?: string }>
   uncovered: string[]
   readiness: { ok: boolean; reasons: string[] }
+  markdown: string
 }
 
 export interface VerifyPayload {
@@ -786,12 +787,49 @@ export function buildReport(rawArgs: unknown): ReportPayload | ToolFailure {
       `uncovered=${uncovered.length}; notRun=${notRun.size}; rows=${checklist.length}`,
     )
   }
+  const readiness = distributionReadiness(payload)
+  const checklistRows = checklist
+  const uncoveredRows = uncovered
   return {
     summary: `PASS ${payload.passed.length} / FAIL ${payload.failed.length} / NOT-RUN ${payload.notRun.length} (32)`,
     checklist,
     uncovered,
-    readiness: distributionReadiness(payload),
+    readiness,
+    markdown: reportMarkdown({
+      summary: `PASS ${payload.passed.length} / FAIL ${payload.failed.length} / NOT-RUN ${payload.notRun.length}`,
+      checklist: checklistRows,
+      uncovered: uncoveredRows,
+      readiness,
+    }),
   }
+}
+
+/**
+ * A block that can be pasted into a PR comment verbatim. Deliberately one
+ * table and no prose: reviewers skim status, not sentences.
+ */
+export function reportMarkdown(input: {
+  summary: string
+  checklist: Array<{ id: string; status: string }>
+  uncovered: string[]
+  readiness: { ok: boolean; reasons: string[] }
+}): string {
+  const failed = input.checklist.filter((row) => row.status === 'FAIL').map((row) => row.id)
+  const coverage = coverageStatement(input.checklist, input.uncovered)
+  const lines = [
+    '### impl-gate report',
+    '',
+    '| check | result |',
+    '| --- | --- |',
+    `| assertions | ${input.summary} |`,
+    `| coverage | ${coverage} |`,
+    `| readiness | ${input.readiness.ok ? 'ready to hand over' : 'not ready'} |`,
+  ]
+  if (failed.length > 0) lines.push(`| failed | ${failed.join(', ')} |`)
+  if (!input.readiness.ok) {
+    for (const reason of input.readiness.reasons) lines.push(`| reason | ${reason.replace(/\|/g, '\\|')} |`)
+  }
+  return lines.join('\n')
 }
 
 /** The one line Step 4 requires: 未覆盖集合 ≡ NOT-RUN 集合（相等/不等）. */
@@ -860,6 +898,9 @@ function renderReport(_args: unknown, value: unknown): Array<{ type: 'text'; tex
       lines.push(`readiness: not ready — ${readiness.reasons.length} reason(s)`)
       for (const reason of readiness.reasons) lines.push(`- ${reason}`)
     }
+  }
+  if (typeof payload.markdown === 'string' && payload.markdown.length > 0) {
+    lines.push('', 'paste into a PR comment:', '', payload.markdown)
   }
   return [{ type: 'text', text: lines.filter((line) => line.length > 0).join('\n') }]
 }
@@ -1235,6 +1276,7 @@ const reportOutputSchema = {
       },
       required: ['ok', 'reasons'],
     },
+    markdown: { type: 'string' },
     error: errorSchema,
   },
 }
