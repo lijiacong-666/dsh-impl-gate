@@ -617,7 +617,15 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
   const notRun = payload.notRun ?? []
   const lines = [`impl_gate_check ${payload.runId ?? ''}: PASS ${passed.length} / FAIL ${failed.length} / NOT-RUN ${notRun.length} (32)`]
   if (failed.length > 0) lines.push(`FAIL: ${failed.join(', ')}`)
-  if (notRun.length > 0) lines.push(`NOT-RUN: ${notRun.join(', ')}`)
+  if (notRun.length > 0) {
+    lines.push(`NOT-RUN: ${notRun.join(', ')}`)
+    // M*/Q* are gate assertions that would need source parsing; this tool deliberately
+    // never reads implementation code, so they stay NOT-RUN instead of being guessed.
+    const codeSide = notRun.filter((id) => /^[MQ]\d+$/.test(id)).length
+    if (codeSide > 0) {
+      lines.push(`  (${codeSide} of them are implementation-side gate assertions — this tool does not parse source code, so they stay NOT-RUN by design)`)
+    }
+  }
   if (payload.graphExitCode !== undefined && payload.graphExitCode !== 0) {
     lines.push(`graphExitCode=${payload.graphExitCode}, ${(payload.graphIssues ?? []).length} issue(s)`)
   }
