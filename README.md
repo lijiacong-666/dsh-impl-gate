@@ -58,6 +58,8 @@ dsh plugin --profile headless add dsh-impl-gate
 
 安装后重启 DSH（桌面版请重启应用），刷新页面。命令会装到你平时使用的 DSH；如果你设置了自己的 `DSH_HOME`，请在同一个环境中运行。从源码安装用于开发调试，见 [docs/development.md](docs/development.md)。
 
+> **先装 specgraph**：materialize 与 check 都靠 python -m specgraph 校验契约图，插件本身不重写它。没装时 impl_gate_compose 会明确返回 PYTHON_ENV_MISSING（而不是装作成功）。安装方式见 [docs/install-specgraph.md](docs/install-specgraph.md)。
+
 ## 实测：会议室预订
 
 给一句话需求「企业级会议室预订」，让未参与开发的模型只读 `playbooks/compose.md` 写 `compose-plan.json`，再经 `impl_gate_compose` 物化，交独立评审判「能不能直接开工」。最终产物：**632 行 SPEC.md / 7 个模块 / 5 个波次 / 36 条 AC / 21 个错误码 / 11 条路由 / 5 张表**。

@@ -28,6 +28,7 @@ const required = [
   'docs/CASE-STUDY-mini.md',
   'docs/CASE-STUDY-run-log.md',
   'docs/CASE-STUDY-pillbox.md',
+  'docs/install-specgraph.md',
 ]
 const allowedPlaybooks = new Set([
   'playbooks/compose.md',
