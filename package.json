@@ -1,7 +1,7 @@
 {
   "name": "dsh-impl-gate",
-  "version": "0.4.27",
-  "description": "Local implementation gate that turns 32 IMPL-GATE assertions into callable DSH tools for DeepSeek Harness.",
+  "version": "0.4.28",
+  "description": "Turn a requirement into a detailed design document another AI can implement: compose a contract graph, review it, hand out task cards, record implementation evidence.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",
   "author": "mofei",

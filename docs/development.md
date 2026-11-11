@@ -4,7 +4,7 @@ AI agents: start at [AGENTS.md](../AGENTS.md), which routes each task to a playb
 
 ## Requirements
 
-- Node.js `^22.19.0 || >=24.0.0`
+- Node.js `>=22.14.0` (the version DSH bundles; see `engines.node`)
 - pnpm, at the version pinned by `packageManager` (`corepack enable` picks it up)
 - A DSH CLI for local testing: `pnpm dev:cli` installs the latest stable npm release into `.dsh-cli/`; if npm has no stable release, it falls back to the highest published prerelease SemVer version. The directory is used only for this repository (see Isolated DSH).
 
@@ -23,14 +23,22 @@ pnpm verify
 | Path                 | Role                                                                        |
 | -------------------- | --------------------------------------------------------------------------- |
 | `src/host/index.ts`  | Host entry. Runs in the DSH Node process and builds to `lib/index.js` (ESM) |
-| `src/client/`        | Client entry. Runs in the DSH web page and builds to `lib/client.js`        |
+| `src/host/tools.ts`  | The seven tool definitions: parameters, output schema, renderers             |
+| `src/host/compose/`  | Plan schema and validation, materialize, `SPEC.md` rendering, checklist/mapping, warnings |
+| `src/host/init/`     | Waves and task cards                                                         |
+| `src/host/review/`   | `review.json` rounds with plan/SPEC hashes                                   |
+| `src/host/record/`   | Runs acceptance commands and stores evidence                                 |
+| `src/host/assertions/` | A1–A5 and the delivery assertions (B1/B2/B5/B7)                            |
+| `checks/impl-gate.checks.json` | The 32 gate assertions as data                                     |
+| `playbooks/`         | Prompt-facing guides: `compose.md`, `review.md`, release and maintenance cards |
 | `cordis.patch.yml`   | DSH bundle patch: mounts the host entry with its default config             |
-| `package.json` `dsh` | Bundle patch path, client platform and explicit external module requests   |
-| `scripts/build.mjs`  | esbuild for both entries                                                    |
+| `package.json` `dsh` | Bundle patch path                                                           |
+| `scripts/build.mjs`  | esbuild for the host entry                                                  |
+| `scripts/smoke.mjs`  | Runs the four reference plans end to end and compares snapshots             |
 | `scripts/dev.mjs`    | Isolated development DSH in `.dsh-dev`                                      |
 | `tests/`             | `node --test` contract tests against the built `lib/`                       |
 
-`lib/index.js` and `lib/client.js` are committed on purpose. `github:` installs and source-backed registries such as dsh.pub read the entry files from the git tree. The pre-commit hook rebuilds them, and CI fails when they are stale.
+`lib/index.js` is committed on purpose. `github:` installs and source-backed registries such as dsh.pub read the entry files from the git tree. The pre-commit hook rebuilds them, and CI fails when they are stale.
 
 ## Scripts
 
@@ -41,13 +49,15 @@ pnpm verify
 | `pnpm test`          | Contract tests (build first)                                |
 | `pnpm check:package` | List the npm tarball contents and check them                |
 | `pnpm check:release` | Release gate: tag, version, metadata, leftover placeholders |
-| `pnpm verify`        | Everything CI runs                                          |
+| `pnpm verify`        | Typecheck, build, tests, package check                       |
+| `pnpm verify:full`   | `verify` plus `smoke:ci`; use it on dev machines and in CI   |
 | `pnpm dev:cli`       | Install the latest stable DSH release, or highest prerelease if none exists, into `.dsh-cli` |
 | `pnpm dev`           | Link this checkout into `.dsh-dev` and start the web profile |
 | `pnpm dev:install`   | Link into `.dsh-dev` without starting DSH                   |
 | `pnpm dev:dsh …`     | Run any dsh command against `.dsh-dev`                      |
 | `pnpm dev:clean`     | Delete `.dsh-dev`                                           |
-| `pnpm smoke <spec>`  | Install a published version into a throwaway DSH home       |
+| `pnpm smoke`         | Materialize/init/check the four reference plans, compare snapshots |
+| `pnpm smoke:ci`      | Same, but skip quietly when the fixtures or Python are absent |
 
 ## Isolated DSH
 

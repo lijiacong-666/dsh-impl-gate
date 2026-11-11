@@ -7,7 +7,7 @@ This file is loaded for every task. It holds only what always applies. Everythin
 ## Always true in this repository
 
 - **pnpm only.** Do not add `package-lock.json`.
-- **`lib/` is committed build output.** `src/host/index.ts` → `lib/index.js`, `src/client/` → `lib/client.js` (`scripts/build.mjs`; the version is baked in). Never edit `lib/` by hand; rebuild and commit it with the source. The pre-commit hook does this and CI rejects a stale `lib/`.
+- **`lib/` is committed build output.** `src/host/index.ts` → `lib/index.js` (`scripts/build.mjs`; the version is baked in). There is no client entry: the plugin is host-side only. Never edit `lib/` by hand; rebuild and commit it with the source. The pre-commit hook does this and CI rejects a stale `lib/`.
 - **The package must install cleanly with pnpm 11 in a user's DSH profile:** no `prepare`/`prepack`/`preinstall`/`install`/`postinstall` scripts, runtime dependencies from the npm registry only, peers only `@deepseek-ai/*`. A test enforces this. Why: [installing.md](playbooks/reference/installing.md).
 - **READMEs are for plugin users.** `README.md` (Chinese, primary) and `README.en.md` never contain agent instructions; those live here and in `playbooks/`.
 - **Document files need approval.** `README*`, `CONTRIBUTING.md` and `docs/**` change only with the user's approval unless the task asks for it ([RED.md](RED.md)).
@@ -27,10 +27,11 @@ This file is loaded for every task. It holds only what always applies. Everythin
 
 ```sh
 pnpm install && pnpm hooks:install
-pnpm verify          # what CI runs: typecheck, build, tests, package check
+pnpm verify          # typecheck, build, tests, package check
+pnpm verify:full     # the above plus smoke:ci (dev machines and CI)
 pnpm dev:cli         # isolated latest stable DSH CLI; latest prerelease fallback if needed
 pnpm dev             # this checkout linked into the isolated DSH home .dsh-dev
-pnpm smoke <spec>    # a published version installed into a throwaway DSH home
+pnpm smoke          # materialize/init/check the four reference plans and compare snapshots
 pnpm check:release   # release gate
 ```
 
