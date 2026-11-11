@@ -1,0 +1,60 @@
+# materialize 的 warnings 怎么读
+
+`impl_gate_compose mode:"materialize"` 会返回一组 `warnings`：**它们不拦截生成**，只说明「文档能生成，但这里还有洞」。
+0.4.2 共 29 类，按「消掉它要做什么」分三组。
+
+| 组 | 含义 | 处理方式 |
+|---|---|---|
+| A 契约没闭合 | 结构上缺东西，任何实现者都会在这里分叉 | 改 plan（几分钟） |
+| B 决定没做 | 文档没给答案，实现者只能猜一个 | 改 plan 或开工会上问一句 |
+| C 可能误报 | 启发式，有的计划里留着也合理 | 看情况，写清理由即可 |
+
+## A 组：契约没闭合（改 plan）
+
+| code | 触发 | 怎么消 |
+|---|---|---|
+| `COVERAGE_GAP` | 某个 goal 没有任何验收断言 `covers` 它 | 给 AC 加 `covers:"G<n>"` |
+| `ERROR_OWNER_MISSING` | 错误码没有 `by` | 给 `errors[]` 补 `by:"M<n>"` |
+| `AUTH_UNSPECIFIED` | 路由没写 `auth` | 补 `auth:"public" \| "session" \| "admin"` |
+| `FILE_OWNERSHIP_OVERLAP` | 两个模块的文件路径相同或只差大小写 | 挪文件或改归属 |
+| `CONSTRAINT_HAS_PATH` | 约束里写了具体文件路径（`app.js`、`src/x.ts`） | 路径只放 `modules[].files`，散文里删掉 |
+| `TYPE_OWNER_MISSING` | 类型被 ≥2 个模块引用却没有 `owner` | 补 `owner:"M<n>"` |
+| `TYPE_OWNER_NO_SOURCE` | 类型有 owner，但该模块没有任何源码后缀文件 | 在 `files` 里加 `.ts`/`.js` 等 |
+| `CONSTRAINT_FIELD_UNKNOWN` | 散文写了 `Type.field`，但该类型字段表里没有 | 补字段或改措辞 |
+| `QUERY_PARAM_UNMAPPED` | 路由声明了查询参数，handler 的参数类型没有同名字段 | 给类型补字段 |
+| `AC_TEST_UNRUNNABLE` | 验收命令首词不在 `impl_gate_record` 白名单，或没写命令 | 换成 `npx vitest run …` 这类可执行命令 |
+| `TOOLING_UNOWNED` | 有验收命令，但没有模块拥有 `package.json` 之类的工具链文件 | 让宿主模块拥有它 |
+| `IN_MEMORY_VS_TABLE` | 表有 `rowWriters`，但写入模块的散文说「内存表/进程内」 | 二者对齐 |
+| `PAGINATION_MODE_CONFLICT` | 同一路由同时声明 `page` 与 `cursor` 两套分页 | 只留一套 |
+| `LIST_PAGINATION_UNDECLARED` | 响应带 `total`/`hasMore`，路由却没有分页参数 | 补 `page`/`pageSize`，或去掉 `total` |
+| `AC_STATUS_CONTRADICTION` | 断言写「返回 201」，同路由 `http[]` 声明 200 | 二选一 |
+| `AC_FIELD_UNKNOWN` | 断言读 `body.x`，响应类型没有 `x` | 改断言或补字段 |
+| `AC_SHELL_LATER` | 断言调用了别的模块的路由，而那个模块还没到波次 | 调波次或改成单元级断言 |
+| `AC_HTTP_OUTSIDE_SHELL` | 模块自己没有路由，却在 AC 里断言 HTTP 调用 | 交给 shell 模块断言 |
+| `PLAN_TEXT_MOJIBAKE` | plan 文本出现连续 `???` 或 U+FFFD | 用 UTF-8 重写那段文本（通常是用 ascii 写脚本落盘的） |
+
+## B 组：决定没做（改 plan 或开工会上问一句）
+
+| code | 触发 | 怎么消 |
+|---|---|---|
+| `STATUS_DEFAULTED` | 写路由没写 `status`，渲染时按 200/204 兜底 | 显式写 `status` |
+| `LIST_ORDER_UNDEFINED` | 响应是集合，但没有任何排序约定 | 在产出方约束里写排序，或加 `orderBy` 参数 |
+| `PATCH_NULLABLE_AMBIGUOUS` | PATCH 请求类型的字段全可空，分不清「不改」与「置空」 | 用 `undefined` 表示不改，`null` 表示置空，并写进约束 |
+| `QUERY_DEFAULT_UNSTATED` | 可选查询参数没有 `note`，也没有一句写缺省/上限 | 补 `note` 或约束 |
+| `WRITE_NO_VALIDATION_ERROR` | 整份 plan 一个 400/422 都没有，却带写路由 | 补校验错误码，或说明为何不需要 |
+| `OPEN_QUESTIONS_PENDING` | `openQuestions` 还有未决项 | 开工会上逐条定，或删掉已定的 |
+
+## C 组：可能误报（写清理由即可留）
+
+| code | 为什么可能是误报 |
+|---|---|
+| `ERROR_UNUSED` | 预留错误码、由客户端触发的码，本计划里确实没人抛 |
+| `BOUNDARY_UNUSED` | 边界描述的是部署环境（「离线」「本机数据库」），不一定要在正文再出现 |
+| `HTTP_ROUTE_UNCOVERED` | 静态资源、健康检查、或由 `flows`/`ui` 覆盖但断言写在别处 |
+| `AC_AUTH_UNSTATED` | 鉴权由 shell 统一处理，单元级断言本来就不带 Origin |
+
+## 一份 plan 的典型收敛顺序
+
+1. 先消 A 组——大多数是补一个字段，一分钟一条；
+2. B 组要么改 plan，要么记进开工会议题（`OPEN_QUESTIONS_PENDING` 至少要在会上过一遍）；
+3. C 组如果留着，在 `openQuestions` 或约束里写一句「为什么可以留」，评审就不会反复问。
