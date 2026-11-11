@@ -1,4 +1,4 @@
-# 实测：药箱提醒（盲测，六轮评审）
+# 实测：药箱提醒（盲测：六轮收敛 + 五轮增量 + 全量实现）
 
 一次「只给一句需求」的完整实验。作者只看 `playbooks/compose.md` 与 `src/host/compose/plan.ts`，
 不知道本仓库的测试与实现；评审看 `playbooks/review.md` 与 `SPEC.md`，不看 plan。
@@ -22,7 +22,7 @@
 | `mapping.md` | 77 行 |
 | `checklist.md` | 47 行（32 条 gate + 需求覆盖） |
 | 结构警告 | 0（唯一剩的是 3 条 `OPEN_QUESTIONS_PENDING`） |
-| 评审 | 六轮，最终 9/9 可开工、blocking 0 |
+| 评审 | 前六轮把文档收敛到 9/9，后续增量评审 round 10–14 再确认；最终 9 个模块全部 ready、blocking 0 |
 
 ## 六轮发生了什么
 
