@@ -198,3 +198,17 @@ review: ready 9 / clarify 0 / blocked 0
 
 - 用固定参照日 `2026-11-10` 造数据、而实现读真实当天，隔一夜就集体偏移一天。改成 `const TODAY = today()` 后用 `Date.UTC` 做偏移，测试才与运行时间无关。
 - `npx vitest run x.test.js -t "reminder-home"` 会匹配到 `reminder-home-limit`，两个用例共享同一套计数断言就互相污染。选择器要写成只有一条用例能命中的名字。
+
+## 四份真实 plan 的警告分布（0.4.1 回归）
+
+`node _probe/regression.mjs` 会对仓库里四份真实 plan 跑 `validatePlan` + `collectWarnings`：
+
+| plan | 模块 | AC | 结构问题 | 警告条目（类别数） |
+| --- | --- | --- | --- | --- |
+| mini | 1 | 3 | 0 | 6（5） |
+| fitness | 8 | 41 | 0 | 36（7） |
+| run-log | 7 | 21 | 0 | 14（6） |
+| pillbox | 9 | 49 | 0 | 3（1） |
+
+药箱只剩 `OPEN_QUESTIONS_PENDING`，是因为其余类别都在六轮评审里逐条改掉了；fitness 那份是早期产物，从没按警告回灌过。
+这张表也说明一件事：**警告数量反映的是 plan 的成熟度，不是工具的好坏**——同一个工具在四份 plan 上给出 5 到 7 类信号，差的是作者的修缮程度。
