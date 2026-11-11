@@ -244,3 +244,25 @@ expected 201 to be 403     // 未 listen 的实例带 Origin: http://127.0.0.1:3
 - 同一版警告在 fitness / run-log / mini 上一枪未发——这三份 plan 把单位写进了字段名（`weightKg`、`distanceM`、`paceSecPerKm`），所以机检也只认「既没 `unit`、名字里也没单位」这一种。
 
 教训：能被字段化的留白（单位、状态码、排序、缺省值）迟早能变成机检；不能字段化的（「这句散文到底在说哪条路由」）仍然只能靠评审。
+## 收尾：一句措辞、一轮增量评审、一次「不可交付」
+
+单位补完后的第 14 轮评审只留了一条非阻塞问题：§8 那句「展示层需要盒数时自行除以规格」不可解析——除以什么规格？除完是整数还是小数？接口到底收不收盒数？都靠猜。
+
+修法是把它写成三件事：契约层只出现整数片数；盒数由前端按包装规格换算；接口不返回、也不接受盒数。改完重物化，`review.json` 里 round 14 立刻变成 stale：
+
+```
+review: round 14 … (blocking 0)
+this review was recorded against an older compose-plan.json; run impl_gate_review again
+consistency: 1 note(s)
+  - review round 14 was recorded against an older compose-plan.json
+readiness: not ready — 1 reason(s)
+```
+
+这正是 0.4.4 / 0.4.19 想要的行为：改了文档而没重审，`check` 会自己说出来，不会拿旧结论冒充新结论。
+
+round 15（增量、只核这一处）判 9/9 ready、blocking 0，并顺手确认了 §4.2 的单位列、§3.1 的「规格原样保存」约束、§4.4 的接口示例三处一致。它留下两条非阻塞建议，记在这里：
+
+1. §8 的两条约定（「契约层只有片」与「换算只在展示层」）语义重复，可以合并；
+2. `unit` 是纯展示标签，若登记成「瓶/盒」，按片计数直接拼单位会出现「100 瓶」——建议约定 `unit` 只写单件名（片/粒/袋）。
+
+两条都不影响开工，`readiness` 此时为 `ready to hand over`。
