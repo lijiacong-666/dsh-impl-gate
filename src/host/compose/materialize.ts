@@ -57,6 +57,7 @@ export interface ComposeWarning {
     | 'AC_FIELD_UNKNOWN'
     | 'UNIT_MISSING'
   | 'ENV_KEY_UNDECLARED'
+  | 'UNIT_INCONSISTENT'
   count: number
   items: string[]
 }
@@ -230,6 +231,29 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (unitless.length > 0) out.push({ code: 'UNIT_MISSING', count: unitless.length, items: unitless.slice(0, 10) })
+  // The same numeric field name in two types must carry the same unit — one DTO saying
+  // 「片」 and another saying nothing is exactly how "storage unit" and "input unit"
+  // drift apart without anyone noticing.
+  const unitByName = new Map<string, { unit: string; where: string }[]>()
+  for (const type of plan.types ?? []) {
+    for (const field of type.fields ?? []) {
+      if (!/\bnumber\b/i.test(field.type)) continue
+      const entry = unitByName.get(field.name) ?? []
+      entry.push({ unit: field.unit ?? '', where: type.name })
+      unitByName.set(field.name, entry)
+    }
+  }
+  const inconsistent: string[] = []
+  for (const [name, entries] of unitByName) {
+    if (entries.length < 2) continue
+    const units = new Set(entries.map((entry) => entry.unit))
+    if (units.size < 2) continue
+    const shown = entries.map((entry) => `${entry.where}:${entry.unit === '' ? '（无）' : entry.unit}`).join(', ')
+    inconsistent.push(`${name} (${shown})`)
+  }
+  if (inconsistent.length > 0) {
+    out.push({ code: 'UNIT_INCONSISTENT', count: inconsistent.length, items: inconsistent.slice(0, 10) })
+  }
   // A runtime command that sets NAME=value is declaring an env key; if globals.envKeys
   // never lists it, whoever deploys has to guess where the value comes from.
   const declaredEnv = new Set(plan.globals?.envKeys ?? [])

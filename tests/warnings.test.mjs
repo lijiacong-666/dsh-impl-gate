@@ -495,3 +495,16 @@ test('ENV_KEY_UNDECLARED flags a runtime command that sets an env key nobody dec
   plan.globals.envKeys.push('APP_PORT')
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'ENV_KEY_UNDECLARED'))
 })
+test('UNIT_INCONSISTENT flags the same field name with different units across types', () => {
+  const plan = basePlan()
+  plan.types.push(
+    { name: 'Stored', kind: 'object', owner: 'M1', fields: [{ name: 'lowStockThreshold', type: 'number', unit: '片' }] },
+    { name: 'Patched', kind: 'object', owner: 'M1', fields: [{ name: 'lowStockThreshold', type: 'number' }] },
+  )
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'UNIT_INCONSISTENT')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /lowStockThreshold \(Stored:片, Patched:（无）\)/)
+
+  plan.types.find((type) => type.name === 'Patched').fields[0].unit = '片'
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'UNIT_INCONSISTENT'))
+})

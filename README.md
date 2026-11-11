@@ -199,7 +199,7 @@ impl_gate_review({
 
 **重跑不丢证据（0.3.1）**：改 plan 后再次 `materialize` 只重写 `NOT-RUN` 行；已填 `PASS`/`FAIL` 的行连同 evidence 原样保留，旧文件先备份到 `.impl-gate/checklist.md.bak-<时间戳>`，结果里带 `checklistPreserved` 与 `checklistBackupPath`。注意 `impl_gate_check` 只看 `NOT-RUN` 与 `## 未覆盖` 是否对称——保留行不会因为 plan 改了而被判失效，这是有意的：改 plan 后请人工复核保留行的 evidence 是否仍成立。
 
-**warnings**：`materialize` 会返回一组「能生成、但这里还有洞」的提示，共 31 类，**不拦截生成**。按「改 plan 才能消 / 开工会上问一句 / 可能误报可留」三组整理在 [docs/WARNINGS.md](docs/WARNINGS.md)，每类都写了触发条件与消法。
+**warnings**：`materialize` 会返回一组「能生成、但这里还有洞」的提示，共 32 类，**不拦截生成**。按「改 plan 才能消 / 开工会上问一句 / 可能误报可留」三组整理在 [docs/WARNINGS.md](docs/WARNINGS.md)，每类都写了触发条件与消法。
 
 - `STATUS_DEFAULTED`：POST/PATCH/PUT/DELETE 没写 `status`，渲染时只能按 200 兜底（`res:"void"` 除外）；这类默认值是猜的，不是决定
 - `LIST_ORDER_UNDEFINED`：返回列表类类型（`XxxList`/`XxxPage`/数组字段就是载荷）却既没有 `query` 里的 `orderBy`/`sortBy`，模块约束里也没写排序口径
