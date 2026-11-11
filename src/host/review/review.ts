@@ -162,7 +162,11 @@ export function recordReview(outDirRaw: string, input: ReviewInput): ReviewOutco
   const planSha256 = hashOf(path.join(outDir, 'compose-plan.json')) ?? ''
   if (planSha256 === '') return failure('PLAN_INVALID', 'compose-plan.json could not be read for hashing')
   const specSha256 = hashOf(path.join(outDir, 'SPEC.md'))
-  const nextRound = input.round ?? stored.rounds.length + 1
+  // Default to one past the highest round on disk. `rounds.length + 1` looked
+// equivalent until a round went missing (deleted file, hand edit): [1, 3] then
+// yields 3 and the caller is told to "pass a new round number" for no reason.
+  const highest = stored.rounds.reduce((max, entry) => (entry.round > max ? entry.round : max), 0)
+  const nextRound = input.round ?? highest + 1
   if (stored.rounds.some((entry) => entry.round === nextRound)) {
     return failure('REVIEW_ROUND_EXISTS', `round ${nextRound} already recorded; pass a new round number`)
   }
