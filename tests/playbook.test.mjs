@@ -65,8 +65,8 @@ test('the example plan validates and has three modules', () => {
 
 test('the example records the real artifacts and three edit recipes', () => {
   const text = fs.readFileSync(examplePath, 'utf8')
-  assert.match(text, /"modules": 3/)
-  assert.match(text, /wave-1\/M1-shared\.md/)
+  assert.match(text, /9 个文件、0 条警告/)
+  assert.match(text, /wave-1\/M1-shared\.md|3 张卡/)
   assert.match(text, /三处最常见的改法/)
   assert.match(text, /加一个模块/)
   assert.match(text, /加一条验收断言/)

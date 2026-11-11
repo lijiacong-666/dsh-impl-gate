@@ -1,6 +1,6 @@
 {
   "name": "dsh-impl-gate",
-  "version": "0.4.31",
+  "version": "0.4.32",
   "description": "Turn a requirement into a detailed design document another AI can implement: compose a contract graph, review it, hand out task cards, record implementation evidence.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",

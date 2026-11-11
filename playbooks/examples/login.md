@@ -17,51 +17,137 @@
   "title": "企业级登录",
   "summary": "微信扫码与手机验证码登录，首次登录自动建号，签发 7 天 token。",
   "stack": "node22+typescript+postgres16",
-  "goals": ["手机验证码可登录", "微信扫码可登录", "首次登录自动建号"],
-  "nonGoals": ["不接企业微信", "不做权限模型", "不做找回密码"],
+  "goals": [
+    "手机验证码可登录",
+    "微信扫码可登录",
+    "首次登录自动建号"
+  ],
+  "nonGoals": [
+    "不接企业微信",
+    "不做权限模型",
+    "不做找回密码"
+  ],
   "boundaries": [
-    { "dependency": "postgres", "purpose": "持久化用户与登录记录", "version": "16", "fallback": "启动失败并报错" },
-    { "dependency": "wechat-oauth", "purpose": "扫码换 openid", "fallback": "微信通道降级为不可用，验证码通道不受影响" }
+    {
+      "dependency": "postgres",
+      "purpose": "持久化用户与登录记录",
+      "version": "16",
+      "fallback": "启动失败并报错"
+    },
+    {
+      "dependency": "wechat-oauth",
+      "purpose": "扫码换 openid",
+      "fallback": "微信通道降级为不可用，验证码通道不受影响"
+    }
   ],
   "globals": {
-    "conventions": ["错误码使用 E_ 前缀", "时间统一 UTC"],
-    "forbidden": ["不在日志里打印验证码与 token"],
-    "envKeys": ["DATABASE_URL", "WECHAT_APP_ID", "WECHAT_SECRET", "TOKEN_TTL_DAYS"]
+    "conventions": [
+      "错误码使用 E_ 前缀",
+      "时间统一 UTC"
+    ],
+    "forbidden": [
+      "不在日志里打印验证码与 token"
+    ],
+    "envKeys": [
+      "DATABASE_URL",
+      "WECHAT_APP_ID",
+      "WECHAT_SECRET",
+      "TOKEN_TTL_DAYS"
+    ]
   },
   "data": [
     {
       "table": "users",
       "owner": "M2",
-      "rowWriters": ["M2"],
-      "columns": [
-        { "name": "id", "type": "uuid", "constraints": ["主键"] },
-        { "name": "phone", "type": "text", "constraints": ["唯一"] },
-        { "name": "email", "type": "text", "constraints": ["可空", "唯一"] },
-        { "name": "openid", "type": "text", "constraints": ["可空", "唯一"] }
+      "rowWriters": [
+        "M2"
       ],
-      "indexes": ["users_phone_idx"],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "constraints": [
+            "主键"
+          ]
+        },
+        {
+          "name": "phone",
+          "type": "text",
+          "constraints": [
+            "唯一"
+          ]
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "constraints": [
+            "可空",
+            "唯一"
+          ]
+        },
+        {
+          "name": "openid",
+          "type": "text",
+          "constraints": [
+            "可空",
+            "唯一"
+          ]
+        }
+      ],
+      "indexes": [
+        "users_phone_idx"
+      ],
       "notes": "手机号与 openid 至少一个非空；由 M2 user-service 建表并 upsert，其他模块只读"
     }
   ],
   "types": [
-    { "name": "Pool", "kind": "external", "source": "pg" },
+    {
+      "name": "Pool",
+      "kind": "external",
+      "source": "pg"
+    },
     {
       "name": "User",
       "kind": "object",
       "fields": [
-        { "name": "id", "type": "string" },
-        { "name": "phone", "type": "string | null" },
-        { "name": "email", "type": "string | null" },
-        { "name": "openid", "type": "string | null" }
-      ]
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "phone",
+          "type": "string | null"
+        },
+        {
+          "name": "email",
+          "type": "string | null"
+        },
+        {
+          "name": "openid",
+          "type": "string | null"
+        }
+      ],
+      "owner": "M2"
     },
     {
       "name": "TokenPair",
       "kind": "object",
       "fields": [
-        { "name": "accessToken", "type": "string" },
-        { "name": "expiresAt", "type": "string" }
-      ]
+        {
+          "name": "accessToken",
+          "type": "string"
+        },
+        {
+          "name": "expiresAt",
+          "type": "string"
+        },
+        {
+          "name": "expiresInSeconds",
+          "type": "number",
+          "unit": "秒"
+        }
+      ],
+      "owner": "M3"
     }
   ],
   "errors": [
@@ -69,7 +155,8 @@
       "code": "E_AUTH_INVALID",
       "status": 401,
       "when": "验证码错误或已过期",
-      "shape": "{\"error\":{\"code\",\"message\"}}"
+      "shape": "{\"error\":{\"code\",\"message\"}}",
+      "by": "M3"
     }
   ],
   "http": [
@@ -78,7 +165,18 @@
       "path": "/auth/login",
       "module": "M3",
       "handler": "login",
-      "res": "TokenPair"
+      "res": "TokenPair",
+      "auth": "public",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/auth/me",
+      "module": "M3",
+      "handler": "me",
+      "res": "User",
+      "auth": "session",
+      "status": 200
     }
   ],
   "modules": [
@@ -87,84 +185,224 @@
       "dir": "shared",
       "title": "共享层",
       "responsibility": "提供数据库连接与公共错误类型",
-      "exposes": [{ "kind": "fn", "signature": "openDb(url: string): Promise<Pool>", "note": "数据库连接池" }],
+      "exposes": [
+        {
+          "kind": "fn",
+          "signature": "openDb(url: string): Promise<Pool>",
+          "note": "数据库连接池"
+        }
+      ],
       "requires": [],
-      "constraints": ["连接池全局唯一"],
-      "files": ["shared/db.ts"],
-      "acceptance": [{ "id": "shared-db", "assertion": "openDb 能连上 postgres", "test": "pnpm test shared" }]
+      "constraints": [
+        "连接池全局唯一"
+      ],
+      "files": [
+        "shared/db.ts",
+        "package.json",
+        "tsconfig.json"
+      ],
+      "acceptance": [
+        {
+          "id": "shared-db",
+          "assertion": "openDb 能连上 postgres",
+          "test": "pnpm test shared",
+          "covers": "G1"
+        }
+      ]
     },
     {
       "id": "M2",
       "dir": "user-service",
       "title": "用户服务",
       "responsibility": "按手机号或 openid 建号与查号",
-      "exposes": [{ "kind": "fn", "signature": "createUser(phone: string): Promise<User>", "note": "首次登录建号" }],
-      "requires": [{ "module": "M1", "item": "openDb(url: string): Promise<Pool>", "why": "写 users 表" }],
-      "constraints": ["手机号唯一", "邮箱冲突返回 409"],
-      "files": ["user-service/create.ts", "user-service/migrations/001_users.sql"],
-      "acceptance": [{ "id": "user-create", "assertion": "重复手机号返回已有用户，不新建", "test": "pnpm test user-service" }]
+      "exposes": [
+        {
+          "kind": "fn",
+          "signature": "createUser(phone: string): Promise<User>",
+          "note": "首次登录建号"
+        }
+      ],
+      "requires": [
+        {
+          "module": "M1",
+          "item": "openDb(url: string): Promise<Pool>",
+          "why": "写 users 表"
+        }
+      ],
+      "constraints": [
+        "手机号唯一",
+        "邮箱冲突返回 409"
+      ],
+      "files": [
+        "user-service/create.ts",
+        "user-service/migrations/001_users.sql"
+      ],
+      "acceptance": [
+        {
+          "id": "user-create",
+          "assertion": "重复手机号返回已有用户，不新建",
+          "test": "pnpm test user-service",
+          "covers": "G2"
+        }
+      ]
     },
     {
       "id": "M3",
       "dir": "auth-api",
       "title": "鉴权 API",
       "responsibility": "暴露验证码登录与微信登录两条入口",
-      "exposes": [{ "kind": "http", "signature": "login(phone: string, code: string): Promise<TokenPair>", "note": "POST /login" }],
-      "requires": [{ "module": "M2", "item": "createUser(phone: string): Promise<User>", "why": "首次登录时建号" }],
-      "constraints": ["不返回密码", "token 有效期 7 天"],
-      "files": ["auth-api/login.ts"],
-      "acceptance": [{ "id": "auth-login", "assertion": "正确验证码返回 token，错误验证码返回 401", "test": "pnpm test auth-api" }]
+      "exposes": [
+        {
+          "kind": "http",
+          "signature": "login(phone: string, code: string): Promise<TokenPair>",
+          "note": "POST /login"
+        },
+        {
+          "kind": "http",
+          "signature": "me(): Promise<User>"
+        },
+        {
+          "kind": "fn",
+          "signature": "startServer(port: number): Promise<void>"
+        }
+      ],
+      "requires": [
+        {
+          "module": "M2",
+          "item": "createUser(phone: string): Promise<User>",
+          "why": "首次登录时建号"
+        }
+      ],
+      "constraints": [
+        "不返回密码",
+        "token 有效期 7 天",
+        "微信扫码通道通过 wechat-oauth 换取 openid；该通道失败时降级为不可用，验证码通道必须不受影响"
+      ],
+      "files": [
+        "auth-api/login.ts",
+        "auth-api/server.ts",
+        "auth-api/me.ts"
+      ],
+      "acceptance": [
+        {
+          "id": "auth-login",
+          "assertion": "正确验证码返回 token，错误验证码返回 401",
+          "test": "pnpm test auth-api",
+          "covers": "G1"
+        },
+        {
+          "id": "auth-me",
+          "assertion": "未登录访问 GET /auth/me 返回 401；登录后返回当前用户的 id 与手机号",
+          "test": "pnpm test auth-api",
+          "covers": "G3"
+        }
+      ]
     }
   ],
   "deliverables": {
     "tree": "login-demo/\n  shared/\n  user-service/\n  auth-api/",
     "files": [
-      { "path": "shared/db.ts", "purpose": "数据库连接池" },
-      { "path": "user-service/create.ts", "purpose": "建号与查号" },
-      { "path": "auth-api/login.ts", "purpose": "登录入口与 token 签发" }
+      {
+        "path": "package.json",
+        "purpose": "工作区清单（脚本与依赖）"
+      },
+      {
+        "path": "shared/db.ts",
+        "purpose": "数据库连接池"
+      },
+      {
+        "path": "user-service/create.ts",
+        "purpose": "建号与查号"
+      },
+      {
+        "path": "auth-api/login.ts",
+        "purpose": "登录入口与 token 签发"
+      }
     ]
+  },
+  "flows": [
+    {
+      "id": "F1",
+      "name": "手机验证码登录",
+      "trigger": "POST /auth/login",
+      "steps": [
+        {
+          "module": "M3",
+          "action": "login",
+          "note": "校验验证码并查询用户"
+        },
+        {
+          "module": "M2",
+          "action": "createUser",
+          "note": "首次登录时建号"
+        },
+        {
+          "module": "M1",
+          "action": "openDb",
+          "note": "复用连接池"
+        }
+      ],
+      "success": "返回 7 天有效的 TokenPair，并写入登录记录",
+      "failure": [
+        "E_AUTH_INVALID"
+      ]
+    }
+  ],
+  "ui": [
+    {
+      "id": "P1",
+      "title": "登录页",
+      "route": "/login",
+      "module": "M3",
+      "shows": [
+        "手机号输入框",
+        "验证码输入框",
+        "获取验证码按钮",
+        "登录按钮",
+        "微信扫码入口"
+      ],
+      "calls": [
+        "POST /auth/login"
+      ],
+      "states": {
+        "error": "表单上方显示错误文案"
+      }
+    }
+  ],
+  "runtime": {
+    "port": 8080,
+    "start": "pnpm start",
+    "health": "/healthz",
+    "migrate": "pnpm migrate"
   }
 }
 ```
 
 ## 真实产物
 
-以下来自同一三模块骨架的实跑目录 `_probe/g2-live`（`name` 为 `g2-demo`，需求为团队账号服务；结构与上面的骨架完全一致）：
+把上面这份 plan 交给 `impl_gate_compose mode:"materialize"`（0.4.31 实跑）：
 
 ```text
-_probe/g2-live/
+login-demo/
 ├── compose-plan.json
-├── SPEC.md
-├── .impl-gate/ownership.json
+├── SPEC.md                    # 200 行 / 6.2 KB，九节齐全
+├── .impl-gate/
+│   ├── checklist.md           # 32 行，A1 的证据已经指到 SPEC.md 的具体行
+│   ├── mapping.md             # 每条「需要」一行
+│   └── ownership.json         # 记录生成了哪些文件、plan 的 sha256
 ├── export/
 │   ├── export.md
 │   └── manifest.json
-├── g2-demo/
-│   ├── graph.toml
-│   ├── shared/spec.md
-│   ├── user-service/spec.md
-│   └── auth-api/spec.md
-└── tasks/
-    ├── TASKS.md
-    ├── cards.json
-    ├── wave-1/M1-shared.md
-    ├── wave-2/M2-user-service.md
-    └── wave-3/M3-auth-api.md
+└── login-demo/                # 契约图谱
+    ├── graph.toml
+    ├── shared/spec.md
+    ├── user-service/spec.md
+    └── auth-api/spec.md
 ```
 
-`python -m specgraph check _probe/g2-live/g2-demo --json` 的关键统计：
-
-```json
-{ "modules": 3, "exposes": 3, "needs": 2, "links": 2, "errors": 0, "warnings": 0 }
-```
-
-三波三卡：
-
-| 波次 | 模块 | 说明 |
-|---|---|---|
-| 1 | M1 shared | 独立，先做 |
-| 2 | M2 user-service | 依赖 M1 |
-| 3 | M3 auth-api | 依赖 M2 |
+- **9 个文件、0 条警告**（把上面整块 plan 原样贴进去即可复现；少了 `covers`、`by`、`package.json` 归属或 HTTP 宿主，就会各自触发一条警告）
+- 三波：M1 独立 → M2 依赖 M1 → M3 依赖 M2；`impl_gate_init` 出 3 张卡
+- `SPEC.md` 的 §4.4 会显示两条路由（`POST /auth/login` 201 前的 200、`GET /auth/me` 200），§5.1 显示 F1 的三步时序，§8.1 显示端口/启动/健康检查/迁移，§10 显示 P1 登录页
 
 ## 三处最常见的改法
 
