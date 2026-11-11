@@ -70,7 +70,9 @@ jobs:
 
   github-release:
     needs: [gate, ci, npm]
-    if: ${{ !cancelled() && needs.ci.result == 'success' && needs.npm.result != 'failure' }}
+    # npm here is published via `npm stage publish` + a passkey approval in the
+    # browser, so a failing OIDC publish must not block the GitHub Release.
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.ci.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
