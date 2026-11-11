@@ -163,3 +163,38 @@ M8 的实现者按安全直觉加了「写方法校验浏览器来源」：带�
 
 这也解释了为什么第 6 轮之后还要再做一次增量评审：契约一改，之前那条 round 就被 `check` 标成
 `this review was recorded against an older compose-plan.json`——**评审结论跟着 plan 哈希走**，不能沿用。
+
+## 九个模块全部实现之后（0.4.0）
+
+上面停在 M1 的「四段闭环」。后续把 M2–M8 也按任务卡交给独立实现者，M9 由我补：
+
+| 模块 | 文件 | 行数 | 拍板决定数 |
+| --- | --- | --- | --- |
+| M1 core | 9 | 571 | 14 |
+| M2 catalog | 3 | 866 | 16 |
+| M3 inventory | 3 | 705 | 10 |
+| M4 reminders | 3 | 598 | 9 |
+| M5 plans | 3 | 875 | 16 |
+| M6 checkins | 3 | 650 | 8 |
+| M7 reports | 4 | 731 | 8 |
+| M8 web | 5 | 1186 | 12 |
+| M9 pages | 5 | 298 | 6 |
+
+合计 35 个文件、6,480 行、49 条 AC：
+
+```
+impl_gate_check  → PASS 10 / FAIL 0 / NOT-RUN 22
+implementation evidence: PASS 49 / FAIL 0 / SKIPPED 0
+review: ready 9 / clarify 0 / blocked 0
+```
+
+### 增量评审（round 10–14）暴露的三件事
+
+1. **改一处要改四处**：加分页时改了约束、`http[].query`、AC，漏了 `types[].fields`；评审判 blocking 3，`QUERY_PARAM_UNMAPPED`（0.3.22）随后把同一处错误变成机检。
+2. **散文与契约相反，只有评审能抓**：F5 流程里仍写 `listMedicines`，而 §3.1 已改成 `listActiveMedicines`。
+3. **允许集合为空时，负向断言会假绿**：`AC-M8-11` 只断言「外站 403 / 不带 Origin 201」，如果实现把 loopback 也拒了，测试仍然绿。补 `web-origin-allow`：真 listen 到端口 0，再带 `http://127.0.0.1:<实际端口>` 的 POST，必须 201。
+
+### 两个测试自身的坑（与产品无关，但值得记）
+
+- 用固定参照日 `2026-11-10` 造数据、而实现读真实当天，隔一夜就集体偏移一天。改成 `const TODAY = today()` 后用 `Date.UTC` 做偏移，测试才与运行时间无关。
+- `npx vitest run x.test.js -t "reminder-home"` 会匹配到 `reminder-home-limit`，两个用例共享同一套计数断言就互相污染。选择器要写成只有一条用例能命中的名字。
