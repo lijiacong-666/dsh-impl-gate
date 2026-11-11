@@ -567,3 +567,36 @@ test('TYPE_UNUSED ignores external types', () => {
   plan.types.push({ name: 'FastifyApp', kind: 'external', source: 'fastify 5' })
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'TYPE_UNUSED'))
 })
+
+test('COVERAGE_GAP flags a goal no acceptance row covers', () => {
+  const plan = basePlan()
+  plan.goals.push('一个没人验收的目标')
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'COVERAGE_GAP')
+  assert.ok(warning, 'expected COVERAGE_GAP')
+  assert.ok(warning.items.some((item) => item.includes('G2')))
+})
+
+test('ERROR_OWNER_MISSING flags an error code without by', () => {
+  const plan = basePlan()
+  plan.errors.push({ code: 'E_ORPHAN', status: 400, when: '没人抛', shape: '{}' })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'ERROR_OWNER_MISSING')
+  assert.ok(warning, 'expected ERROR_OWNER_MISSING')
+  assert.ok(warning.items.some((item) => item.includes('E_ORPHAN')))
+})
+
+test('AUTH_UNSPECIFIED flags a route whose auth is not declared', () => {
+  const plan = basePlan()
+  for (const route of plan.http) delete route.auth
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'AUTH_UNSPECIFIED')
+  assert.ok(warning, 'expected AUTH_UNSPECIFIED')
+  assert.equal(warning.count, plan.http.length)
+})
+
+test('AC_AUTH_UNSTATED flags a session write route whose AC never mentions auth', () => {
+  const plan = basePlan()
+  plan.http.push({ method: 'PATCH', path: '/auth/me', module: 'M3', handler: 'login', req: 'LoginInput', res: 'TokenPair', auth: 'session' })
+  plan.modules[2].acceptance[0].assertion = 'PATCH /auth/me ?? 200'
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'AC_AUTH_UNSTATED')
+  assert.ok(warning, 'expected AC_AUTH_UNSTATED')
+  assert.ok(warning.items.some((item) => item.includes('needs session')))
+})

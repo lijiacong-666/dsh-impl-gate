@@ -61,6 +61,52 @@
 | `HTTP_ROUTE_UNCOVERED` | 静态资源、健康检查、或由 `flows`/`ui` 覆盖但断言写在别处 |
 | `AC_AUTH_UNSTATED` | 鉴权由 shell 统一处理，单元级断言本来就不带 Origin |
 
+## 每条警告的最小复现
+
+下面的测试里各有一到两个构造好的坏例子（搜警告码即可定位），可以对照自己的 plan：
+
+| 警告码 | 最小复现（测试文件） |
+|---|---|
+| `COVERAGE_GAP` | warnings.test.mjs |
+| `ERROR_OWNER_MISSING` | warnings.test.mjs |
+| `AUTH_UNSPECIFIED` | warnings.test.mjs |
+| `ERROR_UNUSED` | warnings.test.mjs |
+| `FILE_OWNERSHIP_OVERLAP` | warnings.test.mjs |
+| `CONSTRAINT_HAS_PATH` | warnings.test.mjs |
+| `AC_AUTH_UNSTATED` | warnings.test.mjs |
+| `HTTP_ROUTE_UNCOVERED` | warnings.test.mjs |
+| `TYPE_OWNER_MISSING` | type-owner.test.mjs |
+| `TYPE_UNUSED` | warnings.test.mjs |
+| `AC_HTTP_OUTSIDE_SHELL` | warnings.test.mjs |
+| `AC_SHELL_LATER` | warnings.test.mjs |
+| `STATUS_DEFAULTED` | warnings.test.mjs |
+| `LIST_ORDER_UNDEFINED` | warnings.test.mjs |
+| `LIST_PAGINATION_UNDECLARED` | warnings.test.mjs |
+| `PAGINATION_MODE_CONFLICT` | warnings.test.mjs |
+| `QUERY_PARAM_UNMAPPED` | warnings.test.mjs |
+| `PATCH_NULLABLE_AMBIGUOUS` | warnings.test.mjs |
+| `BOUNDARY_UNUSED` | warnings.test.mjs |
+| `WRITE_NO_VALIDATION_ERROR` | warnings.test.mjs |
+| `TYPE_OWNER_NO_SOURCE` | warnings.test.mjs |
+| `CONSTRAINT_FIELD_UNKNOWN` | warnings.test.mjs |
+| `IN_MEMORY_VS_TABLE` | warnings.test.mjs |
+| `TOOLING_UNOWNED` | warnings.test.mjs |
+| `AC_STATUS_CONTRADICTION` | warnings.test.mjs |
+| `PLAN_TEXT_MOJIBAKE` | warnings.test.mjs |
+| `OPEN_QUESTIONS_PENDING` | warnings.test.mjs |
+| `AC_TEST_UNRUNNABLE` | warnings.test.mjs |
+| `AC_TEST_SELECTOR_OVERLAP` | warnings.test.mjs |
+| `QUERY_DEFAULT_UNSTATED` | warnings.test.mjs |
+| `AC_FIELD_UNKNOWN` | warnings.test.mjs |
+| `UNIT_MISSING` | warnings.test.mjs |
+| `ENV_KEY_UNDECLARED` | warnings.test.mjs |
+| `UNIT_INCONSISTENT` | warnings.test.mjs |
+| `HTTP_NO_HOST` | warnings.test.mjs |
+| `HTTP_RES_MISMATCH` | warnings.test.mjs |
+| `HTTP_REQ_MISMATCH` | warnings.test.mjs |
+
+## 一份 plan 的典型收敛顺序
+
 ## 一份 plan 的典型收敛顺序
 
 1. 先消 A 组——大多数是补一个字段，一分钟一条；
