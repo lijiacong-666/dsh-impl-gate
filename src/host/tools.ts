@@ -708,7 +708,7 @@ function selectRun(rawRoot: unknown, rawRunId: unknown): { record: RunRecord } |
       return fail(
         'E_NO_PRIOR_RUN',
         `run ${runId} was produced for a different root`,
-        `cached root: ${found.record.graphRoot}; requested root: ${normalizeRoot(root)}`,
+        `cached root: ${found.record.graphRoot}; requested root: ${normalizeRoot(root)}; pass the same graphRoot you gave impl_gate_check (not implRoot)`,
       )
     }
     return { record: found.record }
