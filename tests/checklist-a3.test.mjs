@@ -60,3 +60,29 @@ test('A3 does not pass the exit: marker to the replayed command', async () => {
   assert.equal(out.status, 'PASS')
   assert.deepEqual(argv, ['python', '-m', 'specgraph', 'check', '.'])
 })
+test('A3 rejects file evidence past the end of an existing file', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const dir = mkdtempSync(join(tmpdir(), 'a3-file-'))
+  writeFileSync(join(dir, 'SPEC.md'), '# a\n## b\n### c\n', 'utf8')
+  const ctx = context(`${header}| A1 | PASS | file:SPEC.md:9 |  |`)
+  ctx.implRoot = dir
+  const out = await checkA3(ctx)
+  assert.equal(out.status, 'FAIL')
+  assert.match(out.evidence, /SPEC\.md:9 is past the end of the file \(3 lines\)/)
+})
+
+test('A3 accepts file evidence inside an existing file and skips missing files', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const dir = mkdtempSync(join(tmpdir(), 'a3-file-'))
+  writeFileSync(join(dir, 'SPEC.md'), '# a\n## b\n### c\n', 'utf8')
+  const inside = context(`${header}| A1 | PASS | file:SPEC.md:2 |  |`)
+  inside.implRoot = dir
+  assert.equal((await checkA3(inside)).status, 'PASS')
+  const missing = context(`${header}| A1 | PASS | file:src/future.ts:10 |  |`)
+  missing.implRoot = dir
+  assert.equal((await checkA3(missing)).status, 'PASS')
+})

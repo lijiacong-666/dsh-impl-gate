@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 // A2–A5: everything that can be judged from the delivered checklist plus the
 // pre/post hash snapshot of the inspected graph.
 import type { Assertion, AssertionContext, AssertionOutcome } from './types.js'
@@ -48,6 +50,26 @@ function commandPayload(evidence: string): string {
   return (withoutExit.split(COMMAND_SPLIT)[0] ?? '').trim()
 }
 
+/** Candidate roots a `file:` evidence path may be relative to, nearest first. */
+function evidenceRoots(ctx: AssertionContext): string[] {
+  const roots = [ctx.implRoot, path.dirname(ctx.implRoot), ctx.graphRoot, path.dirname(ctx.graphRoot)]
+  return roots.filter((root, index) => root !== '' && roots.indexOf(root) === index)
+}
+
+function resolveEvidenceFile(ctx: AssertionContext, relative: string): string {
+  for (const root of evidenceRoots(ctx)) {
+    const candidate = path.resolve(root, relative)
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate
+  }
+  return ''
+}
+
+function countLines(file: string): number {
+  const text = fs.readFileSync(file, 'utf8')
+  if (text === '') return 0
+  return text.split('\n').length - (text.endsWith('\n') ? 1 : 0)
+}
+
 export const checkA3: Assertion = async (ctx) => {
   if (!ctx.checklist.provided) return checklistMissing()
   const problems: string[] = []
@@ -63,8 +85,19 @@ export const checkA3: Assertion = async (ctx) => {
     }
     prefixOk += 1
     if (isFile) {
-      if (!/:\d+$/.test(row.evidence.replace(/^file:\s*/i, ''))) {
+      const target = row.evidence.replace(/^file:\s*/i, '')
+      if (!/:\d+$/.test(target)) {
         problems.push(`${row.id}: file evidence lacks :line`)
+        continue
+      }
+      const line = Number(target.slice(target.lastIndexOf(':') + 1))
+      const relative = target.slice(0, target.lastIndexOf(':'))
+      // Only validate files that exist: at design time a row may legitimately
+      // point at code that has not been written yet (e.g. src/foo.ts:10).
+      const resolved = resolveEvidenceFile(ctx, relative)
+      if (resolved !== '' && line > 0) {
+        const total = countLines(resolved)
+        if (line > total) problems.push(`${row.id}: ${relative}:${line} is past the end of the file (${total} lines)`)
       }
       continue
     }

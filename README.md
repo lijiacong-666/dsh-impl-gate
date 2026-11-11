@@ -89,7 +89,7 @@ dsh plugin --profile headless add dsh-impl-gate
 ```
 
 - `status` 只能是 `PASS`、`FAIL`、`NOT-RUN`。
-- `evidence` 必须以 `command:` 或 `file:` 开头；`command:` 要带 `exit: <code>`，`file:` 要带 `:line`。A3 会抽 3 条命令复跑并比对声明的退出码。
+- `evidence` 必须以 `command:` 或 `file:` 开头；`command:` 要带 `exit: <code>`，`file:` 要带 `:line`。A3 会抽 3 条命令复跑并比对声明的退出码；`file:` 指向的文件若存在，还会检查行号不超过该文件行数（文件不存在则跳过，允许引用尚未写出的实现文件）。
 - `reason` 仅 `NOT-RUN` 时必填，且必须来自下面的 NOT-RUN 码表；其余状态留空。
 - NOT-RUN 的条目还要列进 `## 未覆盖` 段，A4 要求两边集合相等。
 
