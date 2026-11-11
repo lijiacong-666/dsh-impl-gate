@@ -35,6 +35,7 @@ export interface ComposeWarning {
     | 'AC_AUTH_UNSTATED'
     | 'HTTP_ROUTE_UNCOVERED'
     | 'TYPE_OWNER_MISSING'
+    | 'TYPE_UNUSED'
     | 'AC_HTTP_OUTSIDE_SHELL'
     | 'AC_SHELL_LATER'
     | 'STATUS_DEFAULTED'
@@ -459,6 +460,32 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .map((type) => type.name)
   if (ownerless.length > 0) {
     out.push({ code: 'TYPE_OWNER_MISSING', count: ownerless.length, items: ownerless })
+  }
+
+  // A type nobody references anywhere is either a leftover from an old design or
+  // a shape the author meant to use but forgot to wire in. The corpus has to be
+  // wide (handler names, query types, other types' fields) or this becomes noise:
+  // `Reminder` is used as `ReminderList`'s element, not named in any signature.
+  const typeCorpus = [
+    ...plan.modules.flatMap((module) => [
+      ...(module.exposes ?? []).map((expose) => expose.signature),
+      ...(module.constraints ?? []),
+      ...(module.acceptance ?? []).map((item) => item.assertion),
+    ]),
+    ...(plan.http ?? []).flatMap((route) => [
+      route.req ?? '',
+      route.res ?? '',
+      route.handler ?? '',
+      ...(route.query ?? []).map((param) => param.type),
+    ]),
+    ...(plan.types ?? []).flatMap((type) => (type.fields ?? []).map((field) => field.type)),
+  ].join('\n')
+  const unusedTypes = (plan.types ?? [])
+    .filter((type) => type.kind !== 'external')
+    .filter((type) => !new RegExp(`\\b${type.name}\\b`).test(typeCorpus))
+    .map((type) => type.name)
+  if (unusedTypes.length > 0) {
+    out.push({ code: 'TYPE_UNUSED', count: unusedTypes.length, items: unusedTypes })
   }
 
   // 边界里声明的外部依赖如果全篇再没人提，读者会以为系统真的接了这个依赖，

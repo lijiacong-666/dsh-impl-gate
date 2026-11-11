@@ -1,7 +1,7 @@
 # materialize 的 warnings 怎么读
 
 `impl_gate_compose mode:"materialize"` 会返回一组 `warnings`：**它们不拦截生成**，只说明「文档能生成，但这里还有洞」。
-0.4.20 共 36 类，按「消掉它要做什么」分三组。
+0.4.21 共 37 类，按「消掉它要做什么」分三组。
 
 | 组 | 含义 | 处理方式 |
 |---|---|---|
@@ -20,6 +20,7 @@
 | `CONSTRAINT_HAS_PATH` | 约束里写了具体文件路径（`app.js`、`src/x.ts`） | 路径只放 `modules[].files`，散文里删掉 |
 | `TYPE_OWNER_MISSING` | 类型被 ≥2 个模块引用却没有 `owner` | 补 `owner:"M<n>"` |
 | `TYPE_OWNER_NO_SOURCE` | 类型有 owner，但该模块没有任何源码后缀文件 | 在 `files` 里加 `.ts`/`.js` 等 |
+| `TYPE_UNUSED` | `types[]` 里声明了一个类型，但签名、路由的 req/res、查询参数、其它类型的字段都没提到它 | 删掉它，或者把它接进某个签名；externals 不参与 |
 | `CONSTRAINT_FIELD_UNKNOWN` | 散文写了 `Type.field`，但该类型字段表里没有 | 补字段或改措辞 |
 | `QUERY_PARAM_UNMAPPED` | 路由声明了查询参数，handler 的参数类型没有同名字段 | 给类型补字段 |
 | `AC_TEST_UNRUNNABLE` | 验收命令首词不在 `impl_gate_record` 白名单，或没写命令 | 换成 `npx vitest run …` 这类可执行命令 |

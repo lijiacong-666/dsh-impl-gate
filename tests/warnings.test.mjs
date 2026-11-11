@@ -551,3 +551,19 @@ test('AC_TEST_SELECTOR_OVERLAP flags prefix selectors on the same test file', ()
   plan.modules[2].acceptance[0].test = 'npx vitest run auth/tests/login.test.js -t "login-bad"'
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'AC_TEST_SELECTOR_OVERLAP'))
 })
+
+test('TYPE_UNUSED flags a type that no signature, route or field mentions', () => {
+  const plan = basePlan()
+  plan.types.push({ name: 'GhostShape', kind: 'object', owner: 'M1', fields: [{ name: 'id', type: 'string' }] })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'TYPE_UNUSED')
+  assert.deepEqual(warning?.items, ['GhostShape'])
+
+  plan.modules[0].exposes.push({ kind: 'fn', signature: 'findGhost(): GhostShape' })
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'TYPE_UNUSED'))
+})
+
+test('TYPE_UNUSED ignores external types', () => {
+  const plan = basePlan()
+  plan.types.push({ name: 'FastifyApp', kind: 'external', source: 'fastify 5' })
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'TYPE_UNUSED'))
+})
