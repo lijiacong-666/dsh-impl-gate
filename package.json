@@ -1,6 +1,6 @@
 {
   "name": "dsh-impl-gate",
-  "version": "0.4.24",
+  "version": "0.4.25",
   "description": "Local implementation gate that turns 32 IMPL-GATE assertions into callable DSH tools for DeepSeek Harness.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",
@@ -75,7 +75,8 @@
     "dev:dsh": "node scripts/dev.mjs run",
     "dev:clean": "node scripts/dev.mjs clean",
     "smoke": "node scripts/smoke.mjs",
-    "smoke:ci": "node scripts/smoke.mjs --ci"
+    "smoke:ci": "node scripts/smoke.mjs --ci",
+    "verify:full": "pnpm typecheck && pnpm build && pnpm test && pnpm check:package && pnpm smoke:ci"
   },
   "simple-git-hooks": {
     "pre-commit": "node scripts/pre-commit.mjs"

@@ -92,3 +92,15 @@ impl_gate_check graphRoot=<项目目录>/<name> implRoot=<项目目录>
 **没有 specgraph 怎么办？** 先装它；插件不会替你装 Python 包。
 
 **为什么评审说不能开工，工具却没说？** 工具查结构（引用闭合、归属、类型字段），查不了「这句话到底该不该这么写」。评审环节不能省。
+
+## 接手一份别人已经生成好的 SPEC
+
+拿到的是一个目录（或压缩包），里面有 `SPEC.md`、`.impl-gate/`、`tasks/`，可能还有 `export/`。先别急着开工，按顺序看三样：
+
+1. **`impl_gate_check` 的 `readiness` 那一行**。`ready to hand over` 才说明评审与实现证据对得上；如果是 `not ready — N reason(s)`，逐条会说明是「没评审」「没证据」「评审针对旧 plan」还是「证据覆盖不全」。
+2. **`review` 与 `consistency` 两行**。`review: round N … blocked 0` 才是过线；`consistency: review and implementation evidence agree` 才说明评审的那版文档和现在的证据是同一个版本。
+3. **`tasks/TASKS.md` 的波次**。如果波次里出现「同一文件被两个模块写」，先找作者确认归属，别自己拍。
+
+如果目录里没有 `.impl-gate/review.json`，说明作者没跑评审——这时 `SPEC.md` 只是「作者自己觉得能开工」，把它当成草稿，按 [review.md](../playbooks/review.md) 的沉默清单自己过一遍，比直接写代码便宜。
+
+> 适用前提：目录里有 `graph.toml`（契约图谱）。只有一个孤零零的 `SPEC.md` 时，`check` 跑不起来，只能人工读文档；这时最有价值的是 `SPEC.md` 第 6 节的验收表和第 9 节的交付清单。
