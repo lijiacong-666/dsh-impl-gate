@@ -352,6 +352,8 @@ impl_gate_verify_contract({ "root": "D:/work/account-service/account-service", "
 
 ## materialize 的 warnings 怎么读
 
+逐条触发条件与消法见仓库里的 `docs/WARNINGS.md`（29 类，分「改 plan / 开工会上问一句 / 可能误报」三组）。下面只讲怎么用它们推进。
+
 materialize 返回值末尾的 `warning CODE (n): …` 是**自检清单**，不是失败。目标不是清零，而是「剩下的每一条你都能解释」。按性质分四类：
 
 **A. 契约没闭合（改 plan）**
