@@ -44,3 +44,4 @@
 - gate 的 32 条断言里 command 是符号名（impl-gate:*），不可执行；impl_gate_record 因此改为执行 modules[].acceptance[].test。
 - 首词白名单之外的命令一律 SKIPPED/RUNNER_NOT_ALLOWED，不提供 --allow-any 开关。
 - 产物 .impl-gate/ac-evidence.json 与 	asks/EVIDENCE.md 不登记进 ownership.json，materialize 不会把它们当冲突。
+| D-26 | 删除 `slow` 开关；Q1 改为 `mode: notrun` + 原因码 `IMPLEMENTATION_ONLY` | 实测 `slow=true` 对结果无影响：Q1 的命令是符号名，永远过不了重放白名单；文档承诺的行为不存在，比没有参数更糟。Q1 语义是目标项目的依赖审计，属实现方 CI，不归本工具跑 | 已批（0.4.40 自定） |

@@ -47,7 +47,6 @@ export interface Config {
   specgraphCwd: string
   timeoutMs: number
   implRoot: string
-  slow: boolean
   allowCommandReplay: boolean
 }
 
@@ -58,7 +57,6 @@ export const Config: z<Config> = z.object({
   specgraphCwd: z.string().default('').description('运行 specgraph 子进程的工作目录；源码方式安装时指向 spec-graph 仓库。'),
   timeoutMs: z.number().default(30000).description('单次 specgraph 调用超时（毫秒）。'),
   implRoot: z.string().default('').description('实现根目录缺省值；为空时使用 graphRoot。'),
-  slow: z.boolean().default(false).description('默认是否运行 slow 断言。'),
   allowCommandReplay: z
     .boolean()
     .default(false)
@@ -89,7 +87,6 @@ export function apply(ctx: Context, config: Config) {
       specgraphCwd: config.specgraphCwd,
       timeoutMs: config.timeoutMs,
       implRoot: config.implRoot,
-      slow: config.slow,
       allowCommandReplay: config.allowCommandReplay,
     },
   }

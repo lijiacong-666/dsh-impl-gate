@@ -39,6 +39,7 @@ export const NOT_RUN_REASONS: ReadonlySet<string> = new Set([
   'EXEC_DISABLED',
   'HUMAN_PROCESS_REQUIRED',
   'EVIDENCE_TOKEN_UNSPECIFIED',
+  'IMPLEMENTATION_ONLY',
 ])
 
 export const CHECKLIST_STATUSES: ReadonlySet<string> = new Set(['PASS', 'FAIL', 'NOT-RUN'])

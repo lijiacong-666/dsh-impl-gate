@@ -56,6 +56,7 @@ const REASONS = new Set([
   'EXEC_DISABLED',
   'HUMAN_PROCESS_REQUIRED',
   'EVIDENCE_TOKEN_UNSPECIFIED',
+  'IMPLEMENTATION_ONLY',
 ])
 
 test('checks.json is data, versioned, and not a string[] shortcut', () => {

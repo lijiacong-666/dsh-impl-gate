@@ -31,7 +31,6 @@ export interface PluginConfig {
   specgraphCwd: string
   timeoutMs: number
   implRoot: string
-  slow: boolean
   allowCommandReplay: boolean
 }
 
@@ -234,10 +233,9 @@ export interface ToolDeps {
   config: PluginConfig
 }
 
-function notRunReason(item: CheckItem, slow: boolean, implemented: boolean): string {
+function notRunReason(item: CheckItem, implemented: boolean): string {
   if (item.mode === 'notrun') return item.notRunReason
   if (item.mode === 'manual') return 'MANUAL_REVIEW_REQUIRED'
-  if (item.runtime === 'slow' && !slow) return 'SLOW_CHECK_DISABLED'
   if (!implemented) return 'NOT_IMPLEMENTED'
   return item.notRunReason
 }
@@ -336,7 +334,6 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
   const args = (rawArgs ?? {}) as {
     graphRoot?: unknown
     implRoot?: unknown
-    slow?: unknown
     checklistPath?: unknown
   }
   const graphRootRaw = typeof args.graphRoot === 'string' ? args.graphRoot : ''
@@ -357,7 +354,6 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
   if ((implRootArg.length > 0 || config.implRoot.length > 0) && !fs.existsSync(implRoot)) {
     return fail('E_ROOT_MISSING', `implRoot does not exist: ${implRoot}`)
   }
-  const slow = args.slow === true || config.slow
 
   let checks: CheckItem[]
   try {
@@ -462,7 +458,6 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
   const ctx: AssertionContext = {
     graphRoot,
     implRoot,
-    slow,
     timeoutMs: config.timeoutMs,
     checks,
     checklist,
@@ -486,10 +481,10 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
 
   for (const item of checks) {
     const assertion = ASSERTIONS[item.id]
-    const gated = item.mode !== 'auto' || (item.runtime === 'slow' && !slow) || assertion === undefined
+    const gated = item.mode !== 'auto' || assertion === undefined
     if (gated) {
       notRun.push(item.id)
-      reasons[item.id] = notRunReason(item, slow, assertion !== undefined)
+      reasons[item.id] = notRunReason(item, assertion !== undefined)
       continue
     }
     try {
@@ -1390,10 +1385,6 @@ const checkParameters = {
     implRoot: {
       type: 'string',
       description: '实现根目录，默认等于 graphRoot。只影响 B 组与 Q5–Q8。',
-    },
-    slow: {
-      type: 'boolean',
-      description: '运行 slow 断言（Q1 依赖审计）。默认关闭。',
     },
     checklistPath: {
       type: 'string',

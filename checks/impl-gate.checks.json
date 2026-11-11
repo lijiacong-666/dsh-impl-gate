@@ -297,14 +297,14 @@
       "id": "Q1",
       "group": "Q",
       "title": "零第三方运行时依赖",
-      "mode": "auto",
-      "runtime": "slow",
+      "mode": "notrun",
+      "runtime": "fast",
       "requires": [
         "venv"
       ],
-      "notRunReason": "SLOW_CHECK_DISABLED",
+      "notRunReason": "IMPLEMENTATION_ONLY",
       "command": "impl-gate:clean-venv",
-      "assert": "cleanVenvUnittestDiscover passes"
+      "assert": "implementer runs the dependency audit in its own clean environment; this tool does not install dependencies"
     },
     {
       "id": "Q2",

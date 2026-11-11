@@ -85,7 +85,7 @@ Four columns, 32 rows, no duplicate or missing ids:
 |----|--------|----------|--------|
 | A1 | PASS | command: python -m specgraph export 支付服务 --root <graphRoot> --out <tmp>; exit: 0 |  |
 | B1 | FAIL | command: python tools/check_mapping.py; exit: 1 |  |
-| Q1 | NOT-RUN | file: docs/q1.md:12 | SLOW_CHECK_DISABLED |
+| Q1 | NOT-RUN | file: docs/q1.md:12 | IMPLEMENTATION_ONLY |
 
 The sample shows only 3 rows (a real file has 32). Angle-bracket tokens such as `<graphRoot>` and `<tmp>` are placeholders and are skipped on replay: neither A3 sampling nor M/Q replay executes a command containing them.
 ```
@@ -112,7 +112,7 @@ The three header names are fixed; each module must be a real node folder and eac
 
 | Tool | Parameters | Notes |
 |------|------------|-------|
-| `impl_gate_check` | `graphRoot` (required), `implRoot`, `checklistPath`, `slow` | Runs once; `checklistPath` defaults to `<implRoot>/.impl-gate/checklist.md` |
+| `impl_gate_check` | `graphRoot` (required), `implRoot`, `checklistPath` | Runs once; `checklistPath` defaults to `<implRoot>/.impl-gate/checklist.md` |
 | `impl_gate_report` | `root` (required), `runId` | Reads the cache; without `runId` uses the latest run for that root |
 | `impl_gate_verify_contract` | `root` (required), `runId` | Re-checks A1–A5 only, never re-runs the other assertions |
 | `impl_gate_compose` | `outDir` (required), `requirement`, `name`, `stack`, `mode`, `overwrite`, `specgraphCwd` | `plan` writes `compose-plan.json` and `SPEC-DRAFT.md`; `materialize` emits the graph, `SPEC.md` and `export/` |
@@ -170,7 +170,6 @@ Each round stores the sha256 of the plan and of `SPEC.md`, so `impl_gate_check` 
 | `specgraphCwd` | empty | cwd for specgraph; point it at the spec-graph repo for source installs. |
 | `timeoutMs` | `30000` | Per-call timeout; the child is killed and `E_TIMEOUT` returned. |
 | `implRoot` | empty | Default implementation root; falls back to `graphRoot`. |
-| `slow` | `false` | Run the slow assertion (Q1). |
 | `allowCommandReplay` | `false` | Replay M/Q evidence commands (≤5, 120 s timeout, first token `python`/`pnpm`/`node`, cwd pinned to `implRoot`). |
 
 **`pythonPath` precedence**: configured `pythonPath` > PATH `python`. When set and the command's first token is python it replaces that token; otherwise the command runs verbatim. The DSH bundled interpreter is not auto-detected; put its absolute path in `pythonPath` when needed.
@@ -208,7 +207,7 @@ The full table, with the trigger and the fix for each kind, lives in [docs/WARNI
 | `CHECKLIST_NOT_PROVIDED` | A2–A4: checklist missing |
 | `IMPL_ROOT_NOT_PROVIDED` | B group and Q5–Q7: no `implRoot`, indistinguishable from the graph root |
 | `LANGUAGE_UNSUPPORTED` | Q2: implementation language unsupported |
-| `SLOW_CHECK_DISABLED` | Q1: `slow=false` |
+| `IMPLEMENTATION_ONLY` | Q1: the dependency audit needs a clean install in the target project; this tool does not do that |
 | `NETWORK_BLOCK_UNSUPPORTED` | Q4: this tool does not use the network |
 | `SCHEMA_UNAVAILABLE` | Q8: no schema to validate |
 | `D4_GRAPH_INVALID` | Invalid graph: all 32 NOT-RUN, `graphIssues` returned verbatim |

@@ -16,7 +16,6 @@ export interface AssertionOutcome {
 export interface AssertionContext {
   graphRoot: string
   implRoot: string
-  slow: boolean
   timeoutMs: number
   checks: CheckItem[]
   checklist: ChecklistParse

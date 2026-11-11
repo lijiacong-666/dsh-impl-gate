@@ -87,7 +87,7 @@ dsh plugin --profile headless add dsh-impl-gate
 |----|--------|----------|--------|
 | A1 | PASS | command: python -m specgraph export 支付服务 --root <graphRoot> --out <tmp>; exit: 0 |  |
 | B1 | FAIL | command: python tools/check_mapping.py; exit: 1 |  |
-| Q1 | NOT-RUN | file: docs/q1.md:12 | SLOW_CHECK_DISABLED |
+| Q1 | NOT-RUN | file: docs/q1.md:12 | IMPLEMENTATION_ONLY |
 
 示例只列 3 行（真实文件 32 行）。`<graphRoot>`、`<tmp>` 这类尖括号是占位符，重放时跳过：A3 采样和 M/Q 重放都不会执行带占位符的命令。
 ```
@@ -114,7 +114,7 @@ dsh plugin --profile headless add dsh-impl-gate
 
 | 工具 | 参数 | 说明 |
 |------|------|------|
-| `impl_gate_check` | `graphRoot`（必填）、`implRoot`、`checklistPath`、`slow` | 跑一次；`checklistPath` 缺省 `<implRoot>/.impl-gate/checklist.md` |
+| `impl_gate_check` | `graphRoot`（必填）、`implRoot`、`checklistPath` | 跑一次；`checklistPath` 缺省 `<implRoot>/.impl-gate/checklist.md` |
 | `impl_gate_report` | `root`（必填）、`runId` | 读缓存汇总；无 `runId` 时取该根最近一次运行 |
 | `impl_gate_verify_contract`（额外给 `delivery`：B1/B2/B5/B7） | `root`（必填）、`runId` | 只复核 A1–A5，不重跑其他断言 |
 | `impl_gate_compose` | `outDir`（必填）、`requirement`、`name`、`stack`、`mode`、`overwrite`、`specgraphCwd` | `plan` 写 `compose-plan.json` 与 `SPEC-DRAFT.md`（plan 已存在则 `E_PLAN_EXISTS`，不会覆盖）；`draft` 只按现有 plan 刷新 `SPEC-DRAFT.md`，从不写 plan；`materialize` 生成图谱、`SPEC.md`、`export/`、`.impl-gate/checklist.md` 与 `.impl-gate/mapping.md` |
@@ -239,7 +239,6 @@ impl_gate_review({
 | `specgraphCwd` | 空 | specgraph 子进程的 cwd；从源码用时指向 spec-graph 仓库。 |
 | `timeoutMs` | `30000` | 单次 specgraph 调用超时；超时杀进程并返回 `E_TIMEOUT`。 |
 | `implRoot` | 空 | 实现根缺省值；为空时等于 `graphRoot`。 |
-| `slow` | `false` | 是否运行 slow 断言（Q1）。 |
 | `allowCommandReplay` | `false` | 是否按证据命令重放 M/Q 断言（≤5 条、超时 120 s、首词限 `python`/`pnpm`/`node`、cwd 限 `implRoot`）。 |
 
 **`pythonPath` 优先级**：配置的 `pythonPath` > PATH 上的 `python`。配置了且 `specgraphCommand` 首词是 python 时用它替换首词；否则原样调用。DSH 捆绑解释器不自动探测，需要时把它的绝对路径填进 `pythonPath`。
@@ -272,7 +271,7 @@ impl_gate_review({
 | `CHECKLIST_NOT_PROVIDED` | A2–A4：勾选表缺失 |
 | `IMPL_ROOT_NOT_PROVIDED` | B 组与 Q5–Q7：没给 `implRoot` 且无法与图根区分 |
 | `LANGUAGE_UNSUPPORTED` | Q2：实现语言不在支持范围 |
-| `SLOW_CHECK_DISABLED` | Q1：`slow=false` |
+| `IMPLEMENTATION_ONLY` | Q1：依赖审计要在目标项目里建干净环境，本工具不做 |
 | `NETWORK_BLOCK_UNSUPPORTED` | Q4：本工具不联网 |
 | `SCHEMA_UNAVAILABLE` | Q8：找不到可校验的 schema |
 | `D4_GRAPH_INVALID` | 图不合法：32 条全 NOT-RUN，`graphIssues` 原样返回 |
