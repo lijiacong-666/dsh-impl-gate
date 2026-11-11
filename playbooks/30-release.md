@@ -11,6 +11,41 @@ gate (tag == v<package.json version>, metadata, no placeholders)
 
 For an npm plugin's very first release, do 20-npm §3 instead; it covers `v0.1.0`. For a GitHub-only plugin's first release, the version is already `0.1.0`, so start at step 3.
 
+## In this repository (2026-11): staged publish, approved in the browser
+
+The pipeline above assumes OIDC Trusted Publishing, which needs a GitHub-hosted runner that can reach npm. Here the maintainer publishes **from the local machine** first, then pushes the tag; the workflow's npm job then prints `dsh-impl-gate@X.Y.Z is already on npm; skipping.` That is expected, not a failure.
+
+Why the detour: the npm account uses a **security key (passkey)** for two-factor auth. The npm CLI cannot complete a WebAuthn prompt, so `npm publish` fails with:
+
+```text
+403 Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages.
+```
+
+Bypass-2FA tokens are deprecated (removed January 2027) and the granular-token page no longer offers the checkbox, so the working path is **staged publish + one human approval**:
+
+```sh
+# ~/.npmrc: a granular token with publish rights, scoped key (npm 11 rejects a bare _authToken)
+# //registry.npmjs.org/:_authToken=***
+npm whoami                     # must print the publishing account
+npm stage publish              # prints "staged with id <uuid>"
+```
+
+Then open npmjs.com → **Staged Packages**, review the tarball, and approve with the passkey. `npm stage approve <id>` cannot help: it needs an OTP and prints the authorization URL masked as `***`.
+
+Verify after approval:
+
+```sh
+npm view dsh-impl-gate version dist.shasum
+npm pack --dry-run --json      # compare the shasum with what npm reports
+```
+
+Notes specific to this plugin:
+
+- **Version, tag and `lib/` move together.** `pnpm verify` rebuilds `lib/` (the version is baked in), so bump → verify → commit → tag.
+- **Tags can be pushed while npm is unreachable.** If `git push` fails with `Failed to connect to github.com port 443`, keep the local tag and push later; the staged version on npm is independent of the tag.
+- **Old tags may never have triggered a workflow.** When the network came back, `v0.3.1`, `v0.3.2` and `v0.3.4` were released through the API because their tag pushes happened during an outage. Creating a Release by hand for an existing tag is fine; creating a second tag for the same version is not.
+- **A stale staged version cannot be edited.** If you spot a bug after staging, bump the patch (0.4.6 → 0.4.7) and stage again; rejecting the old stage also needs the browser.
+
 ## Preconditions
 
 - On `main`, working tree clean, up to date with `origin/main`.
@@ -74,14 +109,14 @@ gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId --jq '
 
 ```sh
 gh release view vX.Y.Z --json tagName,isPrerelease,url,body
-npm view <name>@X.Y.Z version dist.attestations.provenance --json    # npm plugins
+npm view dsh-impl-gate@X.Y.Z version dist.shasum          # npm plugins
 ```
 
 Reproduce a user install in a throwaway DSH home. Always name the exact version: for 24 hours pnpm prefers the previous release ([reference/installing.md](reference/installing.md)).
 
 ```sh
-pnpm smoke <name>@X.Y.Z                    # npm plugins
-pnpm smoke github:<owner>/<name>#vX.Y.Z
+npm pack --dry-run --json                  # compare shasum with npm view
+dsh plugin --profile <profile> add dsh-impl-gate@X.Y.Z   # then confirm the tools load
 ```
 
 Each run must end with "Smoke test passed". The script never touches the user's own DSH home; do not replace it with hand-written `DSH_HOME=… dsh …` commands.

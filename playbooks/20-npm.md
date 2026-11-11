@@ -1,5 +1,8 @@
 # 20 · npm publishing
 
+
+> **Passkey accounts:** if two-factor auth is a security key rather than an authenticator app, the CLI cannot publish. Use the staged flow in [30-release.md](30-release.md) ? *In this repository*.
+
 Goal: the package exists on npm, releases publish from GitHub Actions through **Trusted Publishing** (OIDC, no stored token, automatic provenance), and token publishing is turned off.
 
 The first version is published manually because a new package has no npm settings page yet. Trusted Publishing is configured after that first publish, then validated by a later, new version from CI.
