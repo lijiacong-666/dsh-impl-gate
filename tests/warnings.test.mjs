@@ -441,3 +441,27 @@ test('PLAN_TEXT_MOJIBAKE catches text a script wrote as question marks', () => {
   plan.modules[0].responsibility = '负责\uFFFD入库'
   assert.equal(collectWarnings(plan).find((entry) => entry.code === 'PLAN_TEXT_MOJIBAKE')?.count, 1)
 })
+
+test('QUERY_DEFAULT_UNSTATED flags an optional query parameter with no default anywhere', () => {
+  const plan = basePlan()
+  plan.types.push({ name: 'UserList', kind: 'object', fields: [{ name: 'items', type: 'User[]' }] })
+  plan.modules[2].exposes.push({ kind: 'http', signature: 'listUsers(): Promise<UserList>' })
+  plan.http.push({ method: 'GET', path: '/users', module: 'M3', handler: 'listUsers', res: 'UserList', auth: 'session', query: [{ name: 'limit', type: 'number' }] })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'QUERY_DEFAULT_UNSTATED')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /limit has no default stated/)
+
+  plan.modules[2].constraints.push('limit 缺省 20，最多 100')
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'QUERY_DEFAULT_UNSTATED'))
+})
+
+test('AC_FIELD_UNKNOWN flags body.x on a response type without that field', () => {
+  const plan = basePlan()
+  plan.modules[2].acceptance.push({ id: 'a-token', assertion: 'POST /auth/login returns 200 and body.secret', test: 'pnpm test' })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'AC_FIELD_UNKNOWN')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /reads body\.secret but TokenPair has no such field/)
+
+  plan.types.find((type) => type.name === 'TokenPair').fields.push({ name: 'secret', type: 'string' })
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'AC_FIELD_UNKNOWN'))
+})

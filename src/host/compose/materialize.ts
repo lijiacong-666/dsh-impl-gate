@@ -53,6 +53,8 @@ export interface ComposeWarning {
     | 'PLAN_TEXT_MOJIBAKE'
     | 'OPEN_QUESTIONS_PENDING'
     | 'AC_TEST_UNRUNNABLE'
+    | 'QUERY_DEFAULT_UNSTATED'
+    | 'AC_FIELD_UNKNOWN'
   count: number
   items: string[]
 }
@@ -329,6 +331,27 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   }
   if (unmapped.length > 0) out.push({ code: 'QUERY_PARAM_UNMAPPED', count: unmapped.length, items: unmapped })
 
+  // An optional query parameter with no `note` and no sentence in the owning
+  // module's constraints (or in globals.conventions) saying what the default is:
+  // the implementer has to pick 10/20/50 out of thin air.
+  const defaultWords = /缺省|默认|default|上限|最多|最少|从 ?1 ?开始/
+  const conventionText = (plan.globals?.conventions ?? []).join('\n')
+  const unstatedDefaults: string[] = []
+  for (const entry of plan.http ?? []) {
+    const params = (entry.query ?? []).filter((param) => param.required !== true)
+    if (params.length === 0) continue
+    const owner = (plan.modules ?? []).find((module) => module.id === entry.module)
+    const text = `${(owner?.constraints ?? []).join('\n')}\n${conventionText}`
+    for (const param of params) {
+      if (typeof param.note === 'string' && param.note.trim() !== '') continue
+      const named = text
+        .split(/\n/)
+        .some((line) => line.includes(param.name) && defaultWords.test(line))
+      if (!named) unstatedDefaults.push(`${entry.method} ${entry.path} → ${param.name} has no default stated`)
+    }
+  }
+  if (unstatedDefaults.length > 0) out.push({ code: 'QUERY_DEFAULT_UNSTATED', count: unstatedDefaults.length, items: unstatedDefaults })
+
   // A PATCH request type whose every field is nullable cannot express "leave it
   // alone" versus "set it to null": the implementer has to guess.
   const patchTypes = new Set<string>()
@@ -574,6 +597,44 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   if (contradictions.length > 0) {
     out.push({ code: 'AC_STATUS_CONTRADICTION', count: contradictions.length, items: contradictions })
   }
+
+  // An acceptance row that reads `body.x` on a single, unambiguous route whose
+  // response type has no field `x`: the implementer writes an assertion that can
+  // never pass, or silently changes the contract to match the assertion.
+  const fieldHits: string[] = []
+  const fieldSeen = new Set<string>()
+  for (const module of plan.modules) {
+    for (const item of module.acceptance ?? []) {
+      const keys = new Set<string>()
+      for (const match of item.assertion.matchAll(/\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s，,。）)]*)/g)) {
+        const rawPath = match[2]
+        if (rawPath === undefined) continue
+        keys.add(`${match[1]} ${routePath(rawPath)}`)
+      }
+      if (keys.size !== 1) continue
+      const key = [...keys][0] ?? ''
+      const method = key.split(' ')[0] ?? ''
+      const routePathOnly = key.slice(method.length + 1)
+      const route = routes.find((entry) => entry.method === method && entry.path === routePathOnly)
+      if (route === undefined || route.res === undefined || route.res === '' || route.res === 'void') continue
+      const declared = typeIndex.get(route.res)
+      if (declared === undefined || declared.kind !== 'object') continue
+      const known = new Set((declared.fields ?? []).map((field) => field.name))
+      // 4xx 的响应是统一错误体，不是成功响应的类型；此时读 body.error/message/... 合法。
+      const errorCase = /\bE_[A-Z0-9_]+\b|\b4[0-9]{2}\b/.test(item.assertion)
+      const envelope = new Set(['error', 'message', 'code', 'details'])
+      for (const read of item.assertion.matchAll(/\bbody\.([A-Za-z0-9_]+)/g)) {
+        const field = read[1]
+        if (field === undefined || known.has(field)) continue
+        if (errorCase && envelope.has(field)) continue
+        const line = `${module.id}: ${item.id} reads body.${field} but ${route.res} has no such field`
+        if (fieldSeen.has(line)) continue
+        fieldSeen.add(line)
+        fieldHits.push(line)
+      }
+    }
+  }
+  if (fieldHits.length > 0) out.push({ code: 'AC_FIELD_UNKNOWN', count: fieldHits.length, items: fieldHits })
   // 路由被 flows 的步骤调用、或被页面的 calls 引用，也算“有人走过”：
   // 设计文档里 AC 是单元级的时候，路由本来就不会出现在 AC 里。
   const routeKey = (text: string): string => {
