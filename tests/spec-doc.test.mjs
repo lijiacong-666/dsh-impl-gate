@@ -195,3 +195,17 @@ test('a pipe inside a constraint is escaped and keeps the table two-column', () 
   assert.ok(row !== undefined)
   assert.equal(row.replace(/\\\|/g, '').split('|').length, 4, row)
 })
+
+test('a type field with a unit renders a 单位 column; without one the column stays out', () => {
+  const p = plan()
+  p.types = [{ name: 'Duration', kind: 'object', owner: 'M1', fields: [{ name: 'durationMin', type: 'number', unit: '分钟' }] }]
+  const waves = computeWaves(p)
+  const withUnit = renderSpecDoc({ plan: p, waves: waves.result })
+  assert.match(withUnit, /\| 字段 \| 类型 \| 单位 \| 说明 \|/)
+  assert.match(withUnit, /\| durationMin \| number \| 分钟 \| — \|/)
+
+  p.types[0].fields[0].unit = undefined
+  const plain = renderSpecDoc({ plan: p, waves: waves.result })
+  assert.match(plain, /\| 字段 \| 类型 \| 说明 \|/)
+  assert.ok(!plain.includes('| 单位 |'))
+})

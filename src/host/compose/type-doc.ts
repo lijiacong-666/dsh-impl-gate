@@ -17,7 +17,13 @@ function table(headers: string[], rows: string[][]): string[] {
 export function renderTypeBlock(type: PlanType): string[] {
   const lines: string[] = [`#### ${type.name}（${type.kind}）`, '']
   if (type.kind === 'object') {
-    lines.push(...table(['字段', '类型', '说明'], (type.fields ?? []).map((field) => [field.name, field.type, field.note ?? '—'])))
+    const fields = type.fields ?? []
+    const hasUnit = fields.some((field) => field.unit !== undefined)
+    if (hasUnit) {
+      lines.push(...table(['字段', '类型', '单位', '说明'], fields.map((field) => [field.name, field.type, field.unit ?? '—', field.note ?? '—'])))
+    } else {
+      lines.push(...table(['字段', '类型', '说明'], fields.map((field) => [field.name, field.type, field.note ?? '—'])))
+    }
   } else if (type.kind === 'external') {
     lines.push(`来源：${type.source ?? '（未写明）'}`)
   } else {

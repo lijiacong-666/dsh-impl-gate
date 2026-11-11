@@ -1,7 +1,7 @@
 # materialize 的 warnings 怎么读
 
 `impl_gate_compose mode:"materialize"` 会返回一组 `warnings`：**它们不拦截生成**，只说明「文档能生成，但这里还有洞」。
-0.4.2 共 29 类，按「消掉它要做什么」分三组。
+0.4.10 共 30 类，按「消掉它要做什么」分三组。
 
 | 组 | 含义 | 处理方式 |
 |---|---|---|
@@ -32,6 +32,7 @@
 | `AC_SHELL_LATER` | 断言调用了别的模块的路由，而那个模块还没到波次 | 调波次或改成单元级断言 |
 | `AC_HTTP_OUTSIDE_SHELL` | 模块自己没有路由，却在 AC 里断言 HTTP 调用 | 交给 shell 模块断言 |
 | `PLAN_TEXT_MOJIBAKE` | plan 文本出现连续 `???` 或 U+FFFD | 用 UTF-8 重写那段文本（通常是用 ascii 写脚本落盘的） |
+| `UNIT_MISSING` | 数值字段名像量（duration/weight/quantity…），既没 `unit` 也没在名字里带单位 | 给字段加 `unit`（如「分钟」「片」），或把单位写进字段名（`distanceM`） |
 
 ## B 组：决定没做（改 plan 或开工会上问一句）
 

@@ -465,3 +465,23 @@ test('AC_FIELD_UNKNOWN flags body.x on a response type without that field', () =
   plan.types.find((type) => type.name === 'TokenPair').fields.push({ name: 'secret', type: 'string' })
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'AC_FIELD_UNKNOWN'))
 })
+
+test('UNIT_MISSING flags magnitudes without a unit, and respects name suffixes', () => {
+  const plan = basePlan()
+  plan.types.push({
+    name: 'Shipment',
+    kind: 'object',
+    owner: 'M1',
+    fields: [
+      { name: 'totalQuantity', type: 'number' },
+      { name: 'distanceM', type: 'number' },
+      { name: 'totalAmount', type: 'number', unit: '分' },
+    ],
+  })
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'UNIT_MISSING')
+  assert.equal(warning?.count, 1)
+  assert.deepEqual(warning?.items, ['Shipment.totalQuantity'])
+
+  plan.types.find((type) => type.name === 'Shipment').fields[0].unit = '箱'
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'UNIT_MISSING'))
+})

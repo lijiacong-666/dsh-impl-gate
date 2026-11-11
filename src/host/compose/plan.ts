@@ -13,6 +13,8 @@ export interface PlanTypeField {
   name: string
   type: string
   note?: string
+  /** 0.4.10: the magnitude a number carries ("分钟", "克"). Rendered, not inferred. */
+  unit?: string
 }
 
 export interface PlanType {
@@ -222,7 +224,7 @@ const DELIVERABLE_KEYS = new Set(['tree', 'files'])
 const FILE_KEYS = new Set(['path', 'purpose'])
 const ACCEPTANCE_KEYS = new Set(['id', 'assertion', 'test', 'covers'])
 const TYPE_KEYS = new Set(['name', 'kind', 'fields', 'values', 'source', 'note', 'owner'])
-const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note'])
+const TYPE_FIELD_KEYS = new Set(['name', 'type', 'note', 'unit'])
 const ERROR_KEYS = new Set(['code', 'status', 'when', 'shape', 'by'])
 const HTTP_KEYS = new Set(['method', 'path', 'module', 'handler', 'req', 'res', 'auth', 'reqExample', 'resExample', 'status', 'resHeaders', 'query'])
 const HTTP_QUERY_KEYS = new Set(['name', 'type', 'required', 'note'])
@@ -656,6 +658,11 @@ function validateTypes(raw: unknown, problems: PlanProblem[]): string[] {
         readString(field.type, pointer(fieldAt, 'type'), problems)
         if (field.note !== undefined && typeof field.note !== 'string') {
           problem(problems, pointer(fieldAt, 'note'), 'must be a string when present')
+        }
+        if (field.unit !== undefined) {
+          if (typeof field.unit !== 'string' || field.unit.trim().length === 0) {
+            problem(problems, pointer(fieldAt, 'unit'), 'must be a non-empty string when present')
+          }
         }
       })
       return

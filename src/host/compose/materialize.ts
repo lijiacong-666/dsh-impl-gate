@@ -55,6 +55,7 @@ export interface ComposeWarning {
     | 'AC_TEST_UNRUNNABLE'
     | 'QUERY_DEFAULT_UNSTATED'
     | 'AC_FIELD_UNKNOWN'
+    | 'UNIT_MISSING'
   count: number
   items: string[]
 }
@@ -212,6 +213,22 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
   }
   const noOwner = (plan.errors ?? []).filter((entry) => entry.by === undefined || entry.by === '').map((entry) => entry.code)
   if (noOwner.length > 0) out.push({ code: 'ERROR_OWNER_MISSING', count: noOwner.length, items: noOwner })
+  // 0.4.10: numbers without a magnitude force every implementer to guess
+  // ("秒还是分钟"). Only well-known magnitude words are checked, to keep it quiet.
+  const magnitude = /(duration|weight|height|length|width|depth|distance|volume|amount|price|cost|dose|quantity|capacity|temperature|speed|pace|mass)/i
+  // …unless the name already carries the unit (distanceM / weightKg / paceSecPerKm).
+  const unitSuffix = /(?:Kg|G|Mg|Ml|L|Km|Cm|Mm|M|S|Ms|Us|Min|Sec|Hour|Day|Pct|Bps|Bytes|Kb|Mb|Gb|Usd|Cny|Cent)$/
+  const unitless: string[] = []
+  for (const type of plan.types ?? []) {
+    for (const field of type.fields ?? []) {
+      if (!/\bnumber\b/i.test(field.type)) continue
+      if (!magnitude.test(field.name)) continue
+      if (unitSuffix.test(field.name)) continue
+      if (field.unit !== undefined && field.unit.trim().length > 0) continue
+      unitless.push(`${type.name}.${field.name}`)
+    }
+  }
+  if (unitless.length > 0) out.push({ code: 'UNIT_MISSING', count: unitless.length, items: unitless.slice(0, 10) })
   const referenced = new Set<string>()
   for (const module of plan.modules) {
     for (const text of module.constraints ?? []) {
