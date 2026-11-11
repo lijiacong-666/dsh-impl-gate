@@ -113,8 +113,8 @@ The three header names are fixed; each module must be a real node folder and eac
 | Tool | Parameters | Notes |
 |------|------------|-------|
 | `impl_gate_check` | `graphRoot` (required), `implRoot`, `checklistPath` | Runs once; `checklistPath` defaults to `<implRoot>/.impl-gate/checklist.md` |
-| `impl_gate_report` | `root` (required), `runId` | Reads the cache; without `runId` uses the latest run for that root |
-| `impl_gate_verify_contract` | `root` (required), `runId` | Re-checks A1–A5 only, never re-runs the other assertions |
+| `impl_gate_report` | `root` (required, the same `graphRoot` you gave `check`), `runId` | Reads the cache; without `runId` uses the latest run for that root |
+| `impl_gate_verify_contract` | `root` (required, the same `graphRoot` you gave `check`), `runId` | Re-checks A1–A5 only, never re-runs the other assertions |
 | `impl_gate_compose` | `outDir` (required), `requirement`, `name`, `stack`, `mode`, `overwrite`, `specgraphCwd` | `plan` writes `compose-plan.json` and `SPEC-DRAFT.md`; `materialize` emits the graph, `SPEC.md` and `export/` |
 | `impl_gate_init` | `outDir` (required), `implRoot`, `overwrite` | Writes `<outDir>/tasks/`: `TASKS.md`, `cards.json`, `wave-<n>/<id>-<dir>.md`; leaves the graph, `SPEC.md` and `export/` untouched |
 | `impl_gate_review` | `outDir` (required), `reviewer` (required), `round`, `verdicts` (required) | Appends one review round to `<outDir>/.impl-gate/review.json`: each module `ready` / `clarify` / `blocked`, and `blocked` carries `blocking[]`; a duplicate round is rejected |

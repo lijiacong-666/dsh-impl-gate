@@ -56,6 +56,7 @@ test('report refuses to reuse a run cached under another root', () => {
   const report = buildReport({ root: 'D:/other', runId })
   assert.equal(report.error?.code, 'E_NO_PRIOR_RUN')
   assert.match(report.error.detail ?? '', /cached root/)
+  assert.match(report.error.detail ?? '', /pass the same graphRoot/)
 })
 
 test('report without a previous run returns E_NO_PRIOR_RUN', () => {

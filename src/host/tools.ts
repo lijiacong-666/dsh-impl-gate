@@ -1312,7 +1312,10 @@ const runSelectorParameters = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    root: { type: 'string', description: '检查根（graphRoot）的绝对路径。必填。' },
+    root: {
+      type: 'string',
+      description: '规格图谱根目录（graphRoot），必须与 impl_gate_check 传入的 graphRoot 完全一致（不是 implRoot）。必填。',
+    },
     runId: { type: 'string', description: '前次 impl_gate_check 的 runId；缺省取该根最近一次运行。' },
   },
   required: ['root'],
