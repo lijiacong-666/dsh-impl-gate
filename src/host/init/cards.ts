@@ -125,6 +125,39 @@ export function renderTaskCard(plan: Plan, module: Module, wave: Wave, options: 
       lines.push(`- \`${page.id}\` ${page.title}（${page.route}）调用 ${page.calls.length === 0 ? '（无后端调用）' : page.calls.join('；')}`)
     }
   }
+  // 0.4.8: a one-glance map of neighbours — implementers used to reconstruct this
+  // by reading every other card.
+  lines.push('', '### 4.4 上下游一览', '')
+  const upstream = new Map<string, string[]>()
+  for (const need of module.requires) {
+    const list = upstream.get(need.module) ?? []
+    list.push(need.item)
+    upstream.set(need.module, list)
+  }
+  if (upstream.size === 0) {
+    lines.push(`- 上游：${NONE}（可独立开工）`)
+  } else {
+    lines.push('- 上游（你按签名调用它们）：')
+    for (const [id, items] of upstream) {
+      const provider = byId.get(id)
+      const label = provider === undefined ? id : `${id}/${provider.dir}`
+      lines.push(`  - ${label} —— ${items.length} 条：${items.join('、')}`)
+    }
+  }
+  const downstream: Array<{ id: string; dir: string; items: string[] }> = []
+  for (const other of plan.modules) {
+    if (other.id === module.id) continue
+    const items = other.requires.filter((need) => need.module === module.id).map((need) => need.item)
+    if (items.length > 0) downstream.push({ id: other.id, dir: other.dir, items })
+  }
+  if (downstream.length === 0) {
+    lines.push('- 下游：没有模块依赖你的暴露签名')
+  } else {
+    lines.push('- 下游（它们依赖你，改签名前先通知）：')
+    for (const entry of downstream) {
+      lines.push(`  - ${entry.id}/${entry.dir} —— 需要 ${entry.items.length} 条：${entry.items.join('、')}`)
+    }
+  }
   lines.push('', '## 5 约束', '')
   if (module.constraints.length === 0) {
     lines.push(`- ${NONE}`)

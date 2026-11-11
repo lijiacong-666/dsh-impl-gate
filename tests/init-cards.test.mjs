@@ -153,6 +153,11 @@ test('section 4 resolves the provider signature from the plan', (t) => {
   assert.equal(initTasks(out).ok, true)
   const card = fs.readFileSync(path.join(out, 'tasks', 'wave-3', 'M3-auth-api.md'), 'utf8')
   assert.match(card, /\| M2\/user-service \| createUser \| createUser \| 按签名调用，不要复制其实现 \|/)
+  // 0.4.8: neighbours at a glance
+  assert.match(card, /### 4\.4 上下游一览/)
+  assert.match(card, /- 上游（你按签名调用它们）：/)
+  assert.match(card, /M2\/user-service —— 1 条：createUser/)
+  assert.match(card, /- 下游：没有模块依赖你的暴露签名/)
 })
 
 test('same-wave file overlaps are called out in TASKS.md section 2', (t) => {
