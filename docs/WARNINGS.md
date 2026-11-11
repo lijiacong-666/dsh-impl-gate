@@ -1,7 +1,7 @@
 # materialize 的 warnings 怎么读
 
 `impl_gate_compose mode:"materialize"` 会返回一组 `warnings`：**它们不拦截生成**，只说明「文档能生成，但这里还有洞」。
-0.4.13 共 32 类，按「消掉它要做什么」分三组。
+0.4.16 共 33 类，按「消掉它要做什么」分三组。
 
 | 组 | 含义 | 处理方式 |
 |---|---|---|
@@ -35,6 +35,7 @@
 | `UNIT_MISSING` | 数值字段名像量（duration/weight/quantity…），既没 `unit` 也没在名字里带单位 | 给字段加 `unit`（如「分钟」「片」），或把单位写进字段名（`distanceM`） |
 | `ENV_KEY_UNDECLARED` | `runtime.start` 等命令里写了 `NAME=…`，但 `globals.envKeys` 没列这个键 | 把它加进 `envKeys`，或从命令里删掉 |
 | `UNIT_INCONSISTENT` | 同一个数值字段名在不同类型里单位不一致（含一边没写） | 统一单位；确属不同粒度就改名（`durationMin` / `durationSec`） |
+| `HTTP_NO_HOST` | 声明了 `http[]` 路由，却没有模块提供 `listen`/`buildServer`/`createApp` 入口 | 让壳模块提供入口，或在 `runtime` 里写清宿主 |
 
 ## B 组：决定没做（改 plan 或开工会上问一句）
 

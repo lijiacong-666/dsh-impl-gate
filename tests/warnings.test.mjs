@@ -508,3 +508,9 @@ test('UNIT_INCONSISTENT flags the same field name with different units across ty
   plan.types.find((type) => type.name === 'Patched').fields[0].unit = '片'
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'UNIT_INCONSISTENT'))
 })
+test('HTTP_NO_HOST flags routes when no module exposes a server entry point', () => {
+  const plan = basePlan()
+  assert.equal(collectWarnings(plan).find((entry) => entry.code === 'HTTP_NO_HOST')?.count, 1)
+  plan.modules[0].exposes.push({ kind: 'fn', signature: 'buildServer(): HttpApp' })
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'HTTP_NO_HOST'))
+})

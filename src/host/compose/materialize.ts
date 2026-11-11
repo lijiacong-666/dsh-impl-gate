@@ -58,6 +58,7 @@ export interface ComposeWarning {
     | 'UNIT_MISSING'
   | 'ENV_KEY_UNDECLARED'
   | 'UNIT_INCONSISTENT'
+  | 'HTTP_NO_HOST'
   count: number
   items: string[]
 }
@@ -719,6 +720,21 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     .filter((route) => !touched.has(`${route.method} ${route.path}`))
     .map((route) => `${route.method} ${route.path}`)
   if (uncovered.length > 0) out.push({ code: 'HTTP_ROUTE_UNCOVERED', count: uncovered.length, items: uncovered })
+
+  // Routes without a host: if the plan declares HTTP but no module exposes a server
+  // entry point (listen / buildServer / createApp), nobody owns the socket — the
+  // implementer has to invent a whole layer and the port/start story stays unwritten.
+  const HOST_ENTRY = /\b(listen|startServer|buildServer|createApp)\s*\(/
+  const hasHost = plan.modules.some((module) =>
+    (module.exposes ?? []).some((entry) => HOST_ENTRY.test(entry.signature)),
+  )
+  if (routes.length > 0 && !hasHost) {
+    out.push({
+      code: 'HTTP_NO_HOST',
+      count: routes.length,
+      items: routes.slice(0, 10).map((route) => `${route.method} ${route.path}`),
+    })
+  }
 
   // A module with no route of its own cannot pass an HTTP-level assertion: the
   // shell that listens is a later wave, so such an AC can only fail at its own
