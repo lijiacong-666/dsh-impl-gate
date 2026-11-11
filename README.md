@@ -10,6 +10,8 @@
 
 ## 这是什么
 
+> 第一次用？直接看 [五分钟上手](docs/QUICKSTART.md)：一句需求 → SPEC → 评审 → 任务卡 → 证据。
+
 - **调用而非重写**：每次检查都 spawn `python -m specgraph check --json`，图的问题按原样返回（`graphIssues` + `graphExitCode`）。
 - **32 条逐条裁决**：A（交付物）、B（实现边界）、M（模块/导入）、Q（质量）四组，每条产出 `status` + `evidence`（≤2 KB）；判不了的写 NOT-RUN，不猜。
 - **七个工具**：`impl_gate_check` 跑一次并缓存；`impl_gate_report` 读缓存出汇总与勾选表；`impl_gate_verify_contract` 只复核 A1–A5；`impl_gate_compose` 出契约图谱与 SPEC；`impl_gate_init` 出多 AI 并行任务卡；`impl_gate_review` 把「每个模块能不能直接开工」的评审落到 `.impl-gate/review.json`；`impl_gate_record` 跑 plan 里的验收命令，把实现证据写进 `.impl-gate/ac-evidence.json`。
