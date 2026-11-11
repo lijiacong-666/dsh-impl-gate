@@ -1,6 +1,6 @@
 {
   "name": "dsh-impl-gate",
-  "version": "0.4.32",
+  "version": "0.4.33",
   "description": "Turn a requirement into a detailed design document another AI can implement: compose a contract graph, review it, hand out task cards, record implementation evidence.",
   "icon": "./icon.svg",
   "license": "Apache-2.0",
@@ -76,7 +76,8 @@
     "dev:clean": "node scripts/dev.mjs clean",
     "smoke": "node scripts/smoke.mjs",
     "smoke:ci": "node scripts/smoke.mjs --ci",
-    "verify:full": "pnpm typecheck && pnpm build && pnpm test && pnpm check:package && pnpm smoke:ci"
+    "verify:full": "pnpm typecheck && pnpm build && pnpm test && pnpm check:package && pnpm smoke:ci",
+    "stats": "node scripts/case-study-stats.mjs"
   },
   "simple-git-hooks": {
     "pre-commit": "node scripts/pre-commit.mjs"

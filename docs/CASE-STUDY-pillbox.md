@@ -17,7 +17,7 @@
 | 波次 | 6（1: M1,M9｜2: M2｜3: M3,M4,M5｜4: M6｜5: M7｜6: M8） |
 | 路由 | 22（16 JSON + 6 页面与静态资源） |
 | 验收断言 | 44 条，全部带可执行命令 |
-| `SPEC.md` | 1114 行 / 72 KB |
+| `SPEC.md` | 1126 行 / 75 KB |
 | 任务卡 | 10 张（含 `TASKS.md`） |
 | `mapping.md` | 77 行 |
 | `checklist.md` | 47 行（32 条 gate + 需求覆盖） |
@@ -149,7 +149,7 @@ impl_gate_init outDir=D:\...\pillbox
 | M8 web | 5 | 1186 | 11 |
 | M9 pages | 5 | 298 | 2 |
 
-合计 35 个源文件、6,480 行、48 条 AC。`impl_gate_record modules=["M1"…"M9"]` → **PASS 48 / FAIL 0**；
+合计 35 个源文件、6,480 行、49 条 AC。`impl_gate_record modules=["M1"…"M9"]` → **PASS 49 / FAIL 0**；
 `impl_gate_check` → `PASS 10 / NOT-RUN 22` + `implementation evidence: PASS 48`。
 
 ### 一个实现跑到契约前面的例子
@@ -159,7 +159,7 @@ M8 的实现者按安全直觉加了「写方法校验浏览器来源」：带�
 
 这里 Machine 帮不上忙：plan 内部闭合（码有没有声明、类型有没有字段）能查，**代码里多出来的行为查不出**。
 处理方式是「契约优先」的两步：把 `E_ORIGIN_FORBIDDEN`(403) 补进 §4.3、把规则补进 §3.1 M8、再补一条
-`web-origin` AC（外站 403 / 不带 Origin 仍 201），重物化后 48 条 AC 一起重录。
+`web-origin` AC（外站 403 / 不带 Origin 仍 201），重物化后 49 条 AC 一起重录。
 
 这也解释了为什么第 6 轮之后还要再做一次增量评审：契约一改，之前那条 round 就被 `check` 标成
 `this review was recorded against an older compose-plan.json`——**评审结论跟着 plan 哈希走**，不能沿用。
@@ -266,3 +266,5 @@ round 15（增量、只核这一处）判 9/9 ready、blocking 0，并顺手确�
 2. `unit` 是纯展示标签，若登记成「瓶/盒」，按片计数直接拼单位会出现「100 瓶」——建议约定 `unit` 只写单件名（片/粒/袋）。
 
 两条都不影响开工，`readiness` 此时为 `ready to hand over`。
+
+数字口径：本文的行数、文件数与 AC 数取 0.4.32 时的快照；案例产物放在仓库外的 `_e2e/` 与 `run-log/`，之后 plan 再变会让数字漂移，以产物目录里的 `compose-plan.json` 与实际 `SPEC.md` 为准。

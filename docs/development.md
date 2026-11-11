@@ -57,6 +57,7 @@ pnpm verify
 | `pnpm dev:dsh …`     | Run any dsh command against `.dsh-dev`                      |
 | `pnpm dev:clean`     | Delete `.dsh-dev`                                           |
 | `pnpm smoke`         | Materialize/init/check the four reference plans, compare snapshots |
+| `pnpm stats` | ?????????/??/AC/SPEC ????????????? |
 | `pnpm smoke:ci`      | Same, but skip quietly when the fixtures or Python are absent |
 
 ## Isolated DSH
