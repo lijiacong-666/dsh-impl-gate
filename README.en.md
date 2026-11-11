@@ -158,7 +158,7 @@ Each round stores the sha256 of the plan and of `SPEC.md`, so `impl_gate_check` 
 
 ### What `impl_gate_compose` writes
 
-`mode: "plan"` writes `compose-plan.json` (the model's content) plus `SPEC-DRAFT.md` (rendered with explicit TODO slots), and refuses to overwrite an existing plan unless `overwrite: true`, which first moves the old file to `compose-plan.backup-<timestamp>.json`. `mode: "draft"` only refreshes `SPEC-DRAFT.md`. `mode: "materialize"` writes the contract graph, `SPEC.md`, `export/export.md` + `export/manifest.json`, `.impl-gate/checklist.md` (32 rows, already carrying `file:SPEC.md:<line>` evidence) and `.impl-gate/mapping.md`; when `tasks/` already exists it refreshes the task cards from the same plan.
+`mode: "plan"` writes `compose-plan.json` (the model's content) plus `SPEC-DRAFT.md` (rendered with explicit unfilled slots), and refuses to overwrite an existing plan unless `overwrite: true`, which first moves the old file to `compose-plan.backup-<timestamp>.json`. `mode: "draft"` only refreshes `SPEC-DRAFT.md`. `mode: "materialize"` writes the contract graph, `SPEC.md`, `export/export.md` + `export/manifest.json`, `.impl-gate/checklist.md` (32 rows, already carrying `file:SPEC.md:<line>` evidence) and `.impl-gate/mapping.md`; when `tasks/` already exists it refreshes the task cards from the same plan.
 
 `SPEC.md` lives at `<outDir>/SPEC.md`, beside the graph root rather than inside it: on case-insensitive Windows a graph-root `SPEC.md` is read as the root node `spec.md` and produces false `SECTION_MISSING` / `IMPL_LANGUAGE` findings. `ownership` records it, and spec-graph's `check` does not see it (expected) — deviation D-13.
 
