@@ -56,6 +56,8 @@ dsh plugin --profile headless add dsh-impl-gate
 
 Restart DSH (or the desktop app) and reload the page. The command installs into the DSH you normally use; if you set your own `DSH_HOME`, run it in that same environment. Installing from source is for development; see [docs/development.md](docs/development.md).
 
+New to the tool? Read [docs/FAQ.md](docs/FAQ.md) first, then [docs/QUICKSTART.md](docs/QUICKSTART.md). Three end-to-end case studies live in [docs/CASE-STUDY-pillbox.md](docs/CASE-STUDY-pillbox.md), [docs/CASE-STUDY-run-log.md](docs/CASE-STUDY-run-log.md) and [docs/CASE-STUDY-mini.md](docs/CASE-STUDY-mini.md).
+
 ## Field test: meeting-room booking
 
 Starting from the one-line requirement "enterprise meeting-room booking", a model that had never seen the implementation wrote `compose-plan.json` using only `playbooks/compose.md`; `impl_gate_compose` then materialized it and an independent reviewer judged whether work could start. Final artifact: **632-line SPEC.md / 7 modules / 5 waves / 36 ACs / 21 error codes / 11 routes / 5 tables**.
@@ -115,6 +117,46 @@ The three header names are fixed; each module must be a real node folder and eac
 | `impl_gate_verify_contract` | `root` (required), `runId` | Re-checks A1–A5 only, never re-runs the other assertions |
 | `impl_gate_compose` | `outDir` (required), `requirement`, `name`, `stack`, `mode`, `overwrite`, `specgraphCwd` | `plan` writes `compose-plan.json` and `SPEC-DRAFT.md`; `materialize` emits the graph, `SPEC.md` and `export/` |
 | `impl_gate_init` | `outDir` (required), `implRoot`, `overwrite` | Writes `<outDir>/tasks/`: `TASKS.md`, `cards.json`, `wave-<n>/<id>-<dir>.md`; leaves the graph, `SPEC.md` and `export/` untouched |
+| `impl_gate_review` | `outDir` (required), `reviewer` (required), `round`, `verdicts` (required) | Appends one review round to `<outDir>/.impl-gate/review.json`: each module `ready` / `clarify` / `blocked`, and `blocked` carries `blocking[]`; a duplicate round is rejected |
+| `impl_gate_record` | `outDir` (required), `implRoot`, `modules`, `timeoutMs`, `dryRun` | Runs every acceptance `test` command from the plan (allow-listed first token only) and writes PASS/FAIL, exit code and log tail to `.impl-gate/ac-evidence.json`; refreshes `tasks/EVIDENCE.md` when `tasks/` exists. Repeated calls on the same plan accumulate evidence |
+
+### Implementation evidence (0.3.6)
+
+A review judges the document; `impl_gate_record` judges whether the code satisfies it.
+
+```text
+impl_gate_record({ outDir: "D:/proj/order-service", implRoot: "D:/code/order-service", dryRun: true })
+impl_gate_record({ outDir: "D:/proj/order-service", implRoot: "D:/code/order-service", modules: ["M2"] })
+```
+
+- Commands come from `modules[].acceptance[].test` in the plan, not from the 32 gate assertions (those are symbolic names and cannot be executed).
+- Only commands whose first token is allow-listed run (`pnpm`, `npm`, `node`, `python`, `git`, ...); anything else is recorded as `SKIPPED` + `RUNNER_NOT_ALLOWED`.
+- Results go to `.impl-gate/ac-evidence.json`; `tasks/EVIDENCE.md` is the human-readable view.
+- Failures do not stop the run: every acceptance row is executed and the summary counts `PASS/FAIL/SKIPPED`; the log tail of a failure is printed inline.
+- This is progress evidence, not a gate verdict: it never changes the 32 gate results and never ticks `.impl-gate/checklist.md` for you.
+- `impl_gate_check` reads the file and adds `implementation evidence: PASS x / FAIL y / SKIPPED z (n AC)`; if the evidence was produced against an older plan it says so.
+- Repeated calls accumulate: re-recording only `modules: ["M2"]` keeps the other modules' rows; editing the plan invalidates the whole file.
+
+### Review records (0.3.1)
+
+Machine checks cover reference closure, table ownership and route declarations; they cannot tell whether a given module can be implemented from the document. So a review is recorded as data:
+
+```text
+impl_gate_review({
+  "outDir": "D:/work/account-service",
+  "reviewer": "reviewer-agent-3",
+  "verdicts": [
+    { "module": "M1", "status": "ready", "evidence": "SPEC.md:41" },
+    { "module": "M2", "status": "blocked", "blocking": ["createUser has no error contract"] }
+  ]
+})
+```
+
+Each round stores the sha256 of the plan and of `SPEC.md`, so `impl_gate_check` can say whether the review still describes the current document. `blocked = 0` and `blocking = 0` is the pass line; `clarify` is allowed and belongs in the kickoff meeting.
+
+### What `impl_gate_compose` writes
+
+`mode: "plan"` writes `compose-plan.json` (the model's content) plus `SPEC-DRAFT.md` (rendered with explicit TODO slots), and refuses to overwrite an existing plan unless `overwrite: true`, which first moves the old file to `compose-plan.backup-<timestamp>.json`. `mode: "draft"` only refreshes `SPEC-DRAFT.md`. `mode: "materialize"` writes the contract graph, `SPEC.md`, `export/export.md` + `export/manifest.json`, `.impl-gate/checklist.md` (32 rows, already carrying `file:SPEC.md:<line>` evidence) and `.impl-gate/mapping.md`; when `tasks/` already exists it refreshes the task cards from the same plan.
 
 `SPEC.md` lives at `<outDir>/SPEC.md`, beside the graph root rather than inside it: on case-insensitive Windows a graph-root `SPEC.md` is read as the root node `spec.md` and produces false `SECTION_MISSING` / `IMPL_LANGUAGE` findings. `ownership` records it, and spec-graph's `check` does not see it (expected) — deviation D-13.
 
@@ -134,6 +176,16 @@ The three header names are fixed; each module must be a real node folder and eac
 **`pythonPath` precedence**: configured `pythonPath` > PATH `python`. When set and the command's first token is python it replaces that token; otherwise the command runs verbatim. The DSH bundled interpreter is not auto-detected; put its absolute path in `pythonPath` when needed.
 
 When `specgraphCwd` is empty the plugin walks up from `graphRoot` looking for `specgraph/__init__.py` and injects that directory into the child's `PYTHONPATH` (D-06); the resolved path is recorded in A1 evidence.
+
+## Warnings
+
+`materialize` reports design gaps as warnings next to the files it writes. There are 37 kinds in 0.4.21+, grouped by what you can do about them:
+
+- **A — the contract is not closed**: fix the plan (missing type owner, undeclared error code, route without a host, pagination declared without parameters, ...).
+- **B — a decision was not made**: ask it in the kickoff meeting and write the answer into `constraints` (status codes, list order, default values, unit, ...).
+- **C — possibly a false positive**: write down why it is fine and move on (paths in prose, environment boundaries, ...).
+
+The full table, with the trigger and the fix for each kind, lives in [docs/WARNINGS.md](docs/WARNINGS.md); every row there is backed by a test that reproduces it. Warnings never change the 32 gate results.
 
 ## Error codes and NOT-RUN reasons
 
@@ -229,9 +281,12 @@ See [docs/compatibility.md](docs/compatibility.md).
 ```sh
 pnpm install
 pnpm verify        # typecheck → build lib/ → node --test → package-content check
+pnpm verify:full   # ... plus smoke over the four reference plans (dev machines / CI)
 ```
 
 A source install is linked into the profile via `dsh plugin add <repo>`. After `pnpm verify`, **hot reload does not happen automatically**: the profile must reconcile once — most reliably by toggling `dsh-impl-gate` off and on in the plugin page. Touching files or mtimes does not reload. After a reload, confirm `impl_gate_check` / `impl_gate_report` / `impl_gate_verify_contract` are in the tool list before calling them.
+
+`smoke:ci` skips quietly on machines without the reference plans or a Python interpreter; `verify` stays the bare-machine command.
 
 See [docs/development.md](docs/development.md) and [CONTRIBUTING.md](CONTRIBUTING.md). When an AI agent develops, releases or maintains the plugin, have it read [AGENTS.md](AGENTS.md) first.
 
