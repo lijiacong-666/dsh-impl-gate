@@ -44,7 +44,7 @@ impl_gate_check run-mw633k0l-6039b086: PASS 10 / FAIL 0 / NOT-RUN 22 (32)
 NOT-RUN: B3, B4, B6, M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9
 ```
 
-返回值里还有 `passed[]`、`failed[]`、`notRun[]`、`evidence[]`（`{id,text}`）、`graphIssues[]`、`graphExitCode`、`runId`。把 `runId` 交给 report / verify_contract 即可复用同一次运行结果。
+返回值里还有 `passed[]`、`failed[]`、`notRun[]`、`evidence[]`（`{id,text}`）、`graphIssues[]`、`graphExitCode`、`runId`；录过评审与实现证据后还会带上 `review`、`implementation` 和 `consistency`（两者矛盾时逐条说明，0.4.4）。把 `runId` 交给 report / verify_contract 即可复用同一次运行结果。
 
 <!-- npm:start -->
 

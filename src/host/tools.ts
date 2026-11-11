@@ -55,6 +55,8 @@ export interface CheckPayload {
   implementation?: { pass: number; fail: number; skipped: number; total: number; generatedAt: string; stale: boolean }
   /** Present when impl_gate_review has recorded at least one round. */
   review?: { round: number; reviewer: string; ready: number; clarify: number; blocked: number; blocking: number; stale: boolean; staleField: 'plan' | 'spec' | '' }
+  /** How review verdicts and implementation evidence line up (0.4.4). */
+  consistency?: { ok: boolean; reasons: string[] }
 }
 
 const MAX_EVIDENCE = 2048
@@ -464,6 +466,7 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
   const staleDesign = designStaleness(implRoot)
   const implementation = implementationEvidence(implRoot)
   const review = reviewSummary(implRoot)
+  const consistency = compareReviewAndEvidence(review, implementation)
   const payload: CheckPayload = {
     ...base,
     passed,
@@ -474,9 +477,43 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     ...(staleDesign === undefined ? {} : { designStale: staleDesign }),
     ...(implementation === undefined ? {} : { implementation }),
     ...(review === undefined ? {} : { review }),
+    ...(consistency === undefined ? {} : { consistency }),
   }
   rememberRun(runId, payload, reasons, graphRoot)
   return payload
+}
+
+/**
+ * 0.4.4: review verdicts and implementation evidence are produced at different
+ * times by different actors. Say out loud when they disagree — a "9/9 ready"
+ * review next to a FAILing evidence file is worse than either alone.
+ */
+export function compareReviewAndEvidence(
+  review: CheckPayload['review'],
+  implementation: CheckPayload['implementation'],
+): { ok: boolean; reasons: string[] } | undefined {
+  if (review === undefined && implementation === undefined) return undefined
+  const reasons: string[] = []
+  if (review !== undefined) {
+    if (review.blocked > 0 || review.blocking > 0) {
+      reasons.push(`review round ${review.round} has ${review.blocked} blocked module(s), ${review.blocking} blocking item(s)`)
+    }
+    if (review.stale) {
+      reasons.push(`review round ${review.round} was recorded against an older ${review.staleField === 'spec' ? 'SPEC.md' : 'compose-plan.json'}`)
+    }
+  }
+  if (implementation !== undefined) {
+    if (implementation.fail > 0) {
+      reasons.push(`implementation evidence has ${implementation.fail} FAIL row(s)`)
+    }
+    if (implementation.stale) {
+      reasons.push('implementation evidence was recorded against an older compose-plan.json')
+    }
+  }
+  if (implementation === undefined && review !== undefined && review.blocked === 0 && review.blocking === 0) {
+    reasons.push('review passed but no implementation evidence has been recorded yet')
+  }
+  return { ok: reasons.length === 0, reasons }
 }
 
 /**
@@ -554,6 +591,15 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
     if (review.stale) {
       const what = review.staleField === 'spec' ? 'SPEC.md' : 'compose-plan.json'
       lines.push(`this review was recorded against an older ${what}; run impl_gate_review again`)
+    }
+  }
+  if (payload.consistency !== undefined) {
+    const { ok, reasons } = payload.consistency
+    if (ok) {
+      lines.push('consistency: review and implementation evidence agree')
+    } else {
+      lines.push(`consistency: ${reasons.length} note(s)`)
+      for (const reason of reasons) lines.push(`  - ${reason}`)
     }
   }
   return [{ type: 'text', text: lines.join('\n') }]
@@ -1110,6 +1156,15 @@ const checkOutputSchema = {
         staleField: { type: 'string' },
       },
       required: ['round', 'reviewer', 'ready', 'clarify', 'blocked', 'blocking', 'stale', 'staleField'],
+    },
+    consistency: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ok: { type: 'boolean' },
+        reasons: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['ok', 'reasons'],
     },
     error: errorSchema,
   },
