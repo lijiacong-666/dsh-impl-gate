@@ -1,7 +1,7 @@
 # materialize 的 warnings 怎么读
 
 `impl_gate_compose mode:"materialize"` 会返回一组 `warnings`：**它们不拦截生成**，只说明「文档能生成，但这里还有洞」。
-0.4.18 共 35 类，按「消掉它要做什么」分三组。
+0.4.20 共 36 类，按「消掉它要做什么」分三组。
 
 | 组 | 含义 | 处理方式 |
 |---|---|---|
@@ -38,6 +38,7 @@
 | `HTTP_NO_HOST` | 声明了 `http[]` 路由，却没有模块提供 `listen`/`buildServer`/`createApp` 入口 | 让壳模块提供入口，或在 `runtime` 里写清宿主 |
 | `HTTP_RES_MISMATCH` | 路由声明的 `res` 与处理函数返回类型不一致（`WorkItem` vs `WorkItem[]`） | 改 `res` 或改签名；注册器（`register*`）不参与比对 |
 | `HTTP_REQ_MISMATCH` | POST/PUT/PATCH 的 `req` 与处理函数唯一参数类型不一致 | 改 `req` 或改参数类型；GET/DELETE 的 `req` 请改写成 `query` |
+| `AC_TEST_SELECTOR_OVERLAP` | 同一测试文件的两条 AC，`-t` 选择器一个是另一个的前缀 | 改用例名（如 `origin-blocked` 而不是 `web-origin`），否则一条失败会连带另一条 |
 
 ## B 组：决定没做（改 plan 或开工会上问一句）
 

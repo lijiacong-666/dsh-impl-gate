@@ -53,6 +53,7 @@ export interface ComposeWarning {
     | 'PLAN_TEXT_MOJIBAKE'
     | 'OPEN_QUESTIONS_PENDING'
     | 'AC_TEST_UNRUNNABLE'
+  | 'AC_TEST_SELECTOR_OVERLAP'
     | 'QUERY_DEFAULT_UNSTATED'
     | 'AC_FIELD_UNKNOWN'
     | 'UNIT_MISSING'
@@ -879,6 +880,40 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (unrun.length > 0) out.push({ code: 'AC_TEST_UNRUNNABLE', count: unrun.length, items: unrun })
+  // Two ACs pointing at the same test file with selectors where one is a prefix of the
+  // other: `-t "reminder-home"` also runs `reminder-home-limit`, so both rows pass or
+  // both fail together. We hit this ourselves on the pillbox (49 → 48 AC).
+  const selectorPattern = /(?:-t|--test-name-pattern|--grep)\s+"([^"]+)"/
+  const filePattern = /\brun\s+([^\s-][^\s]*)/
+  const byFile = new Map<string, Array<{ id: string; selector: string }>>()
+  for (const module of plan.modules) {
+    for (const item of module.acceptance ?? []) {
+      const command = (item.test ?? '').trim()
+      const selector = selectorPattern.exec(command)?.[1]
+      if (selector === undefined || selector === '') continue
+      const file = filePattern.exec(command)?.[1] ?? command
+      const key = file.replace(/\\/g, '/')
+      const list = byFile.get(key) ?? []
+      list.push({ id: `${module.id}: ${item.id}`, selector })
+      byFile.set(key, list)
+    }
+  }
+  const overlaps: string[] = []
+  for (const [file, entries] of byFile) {
+    for (let i = 0; i < entries.length; i += 1) {
+      for (let j = 0; j < entries.length; j += 1) {
+        if (i === j) continue
+        const a = entries[i]
+        const b = entries[j]
+        if (a === undefined || b === undefined) continue
+        if (a.selector !== b.selector && !b.selector.startsWith(a.selector)) continue
+        overlaps.push(`${a.id} selector "${a.selector}" also matches ${b.id} "${b.selector}" (${file})`)
+      }
+    }
+  }
+  if (overlaps.length > 0) {
+    out.push({ code: 'AC_TEST_SELECTOR_OVERLAP', count: overlaps.length, items: overlaps.slice(0, 10) })
+  }
   return out
 }
 

@@ -536,3 +536,18 @@ test('HTTP_REQ_MISMATCH compares the declared request body with the handler para
   plan.http[0].method = 'GET'
   assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'HTTP_REQ_MISMATCH'))
 })
+test('AC_TEST_SELECTOR_OVERLAP flags prefix selectors on the same test file', () => {
+  const plan = basePlan()
+  plan.modules[2].acceptance.push({
+    id: 'extra',
+    assertion: '第二个用例',
+    test: 'npx vitest run auth/tests/login.test.js -t "login-ok"',
+  })
+  plan.modules[2].acceptance[0].test = 'npx vitest run auth/tests/login.test.js -t "login"'
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'AC_TEST_SELECTOR_OVERLAP')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /selector "login" also matches .* "login-ok"/)
+
+  plan.modules[2].acceptance[0].test = 'npx vitest run auth/tests/login.test.js -t "login-bad"'
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'AC_TEST_SELECTOR_OVERLAP'))
+})
