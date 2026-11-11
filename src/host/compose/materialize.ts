@@ -54,6 +54,7 @@ export interface ComposeWarning {
     | 'PLAN_TEXT_MOJIBAKE'
     | 'OPEN_QUESTIONS_PENDING'
     | 'AC_TEST_UNRUNNABLE'
+  | 'AC_TEST_NODE_FLAG_LATE'
   | 'AC_TEST_SELECTOR_OVERLAP'
     | 'QUERY_DEFAULT_UNSTATED'
     | 'AC_FIELD_UNKNOWN'
@@ -907,6 +908,23 @@ export function collectWarnings(plan: Plan): ComposeWarning[] {
     }
   }
   if (unrun.length > 0) out.push({ code: 'AC_TEST_UNRUNNABLE', count: unrun.length, items: unrun })
+  // `node --test file.mjs --test-name-pattern="x"` silently ignores the selector:
+  // node parses its own flags only before the positional script, so the pattern is
+  // handed to the script instead of the runner and every test in the file runs.
+  // Measured on Windows/node 22: the same command with the flag before the file
+  // filters correctly. A plan that writes it after the file gets evidence for
+  // tests it never meant to claim.
+  const latePattern = /(?:^|\s)node(?:\.exe)?\s+(?:--test(?:-[a-z-]+)?\s+)?\S+\.(?:mjs|cjs|js|ts)\b[^"]*--test-name-pattern/
+  const late: string[] = []
+  for (const module of plan.modules) {
+    for (const item of module.acceptance ?? []) {
+      const command = (item.test ?? '').trim()
+      if (latePattern.test(command)) {
+        late.push(`${module.id}: ${item.id} puts --test-name-pattern after the file (node ignores it there)`)
+      }
+    }
+  }
+  if (late.length > 0) out.push({ code: 'AC_TEST_NODE_FLAG_LATE', count: late.length, items: late })
   // Two ACs pointing at the same test file with selectors where one is a prefix of the
   // other: `-t "reminder-home"` also runs `reminder-home-limit`, so both rows pass or
   // both fail together. We hit this ourselves on the pillbox (49 → 48 AC).

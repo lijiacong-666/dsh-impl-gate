@@ -179,7 +179,7 @@ When `specgraphCwd` is empty the plugin walks up from `graphRoot` looking for `s
 
 ## Warnings
 
-`materialize` reports design gaps as warnings next to the files it writes. There are 37 kinds in 0.4.21+, grouped by what you can do about them:
+`materialize` reports design gaps as warnings next to the files it writes. There are 38 kinds in 0.4.21+, grouped by what you can do about them:
 
 - **A — the contract is not closed**: fix the plan (missing type owner, undeclared error code, route without a host, pagination declared without parameters, ...).
 - **B — a decision was not made**: ask it in the kickoff meeting and write the answer into `constraints` (status codes, list order, default values, unit, ...).

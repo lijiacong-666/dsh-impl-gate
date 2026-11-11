@@ -199,7 +199,7 @@ impl_gate_review({
 
 **重跑不丢证据（0.3.1）**：改 plan 后再次 `materialize` 只重写 `NOT-RUN` 行；已填 `PASS`/`FAIL` 的行连同 evidence 原样保留，旧文件先备份到 `.impl-gate/checklist.md.bak-<时间戳>`，结果里带 `checklistPreserved` 与 `checklistBackupPath`。注意 `impl_gate_check` 只看 `NOT-RUN` 与 `## 未覆盖` 是否对称——保留行不会因为 plan 改了而被判失效，这是有意的：改 plan 后请人工复核保留行的 evidence 是否仍成立。
 
-**warnings**：`materialize` 会返回一组「能生成、但这里还有洞」的提示，共 37 类，**不拦截生成**。按「改 plan 才能消 / 开工会上问一句 / 可能误报可留」三组整理在 [docs/WARNINGS.md](docs/WARNINGS.md)，每类都写了触发条件与消法。
+**warnings**：`materialize` 会返回一组「能生成、但这里还有洞」的提示，共 38 类，**不拦截生成**。按「改 plan 才能消 / 开工会上问一句 / 可能误报可留」三组整理在 [docs/WARNINGS.md](docs/WARNINGS.md)，每类都写了触发条件与消法。
 
 - `STATUS_DEFAULTED`：POST/PATCH/PUT/DELETE 没写 `status`，渲染时只能按 200 兜底（`res:"void"` 除外）；这类默认值是猜的，不是决定
 - `LIST_ORDER_UNDEFINED`：返回列表类类型（`XxxList`/`XxxPage`/数组字段就是载荷）却既没有 `query` 里的 `orderBy`/`sortBy`，模块约束里也没写排序口径
@@ -212,6 +212,7 @@ impl_gate_review({
 - `AC_STATUS_CONTRADICTION`：AC 里写「返回 201」，而同一路由在 `http[]` 声明的是 200（或反过来）——一处说成功码 201、一处按 200 兜底，实现者只能二选一
 - `OPEN_QUESTIONS_PENDING`：plan 的 `openQuestions` 还有未决项——它们会被渲染到附录 A，但开工时没人翻附录；materialize 时把条数与内容提出来，评审会上先拍板
 - `AC_TEST_UNRUNNABLE`：验收命令的首词不在 `impl_gate_record` 的白名单里（或干脆没写命令）——它跑起来会成为一条 `RUNNER_NOT_ALLOWED` 的 SKIPPED，等于没有证据；常见写法是 `npx vitest run …` 而不是 `人工核对`
+- `AC_TEST_NODE_FLAG_LATE`：`node --test file.mjs --test-name-pattern=…` 把选择器写在文件后面。node 只在位置参数之前解析自己的 flag，写后面的会被忽略，整份文件一起跑——证据会把「别的用例」记成这条 AC；把 flag 挪到文件之前即可
 
 （`AC_SHELL_LATER` 0.3.8 起只报「调用了别的模块的路由」；模块自己拥有那条路由时，测试可以自己挂 app，不再误报。）
 

@@ -1,7 +1,7 @@
 # materialize 的 warnings 怎么读
 
 `impl_gate_compose mode:"materialize"` 会返回一组 `warnings`：**它们不拦截生成**，只说明「文档能生成，但这里还有洞」。
-0.4.21 共 37 类，按「消掉它要做什么」分三组。
+0.4.36 共 38 类，按「消掉它要做什么」分三组。
 
 | 组 | 含义 | 处理方式 |
 |---|---|---|
@@ -24,6 +24,7 @@
 | `CONSTRAINT_FIELD_UNKNOWN` | 散文写了 `Type.field`，但该类型字段表里没有 | 补字段或改措辞 |
 | `QUERY_PARAM_UNMAPPED` | 路由声明了查询参数，handler 的参数类型没有同名字段 | 给类型补字段 |
 | `AC_TEST_UNRUNNABLE` | 验收命令首词不在 `impl_gate_record` 白名单，或没写命令 | 换成 `npx vitest run …` 这类可执行命令 |
+| `AC_TEST_NODE_FLAG_LATE` | `node --test file.mjs --test-name-pattern=…`：node 只在位置参数之前解析自己的 flag，写在文件后面的选择器会被忽略，整份文件一起跑 | 把 `--test-name-pattern` 挪到文件之前，或换 `-t` 放在 vitest 后面 |
 | `TOOLING_UNOWNED` | 有验收命令，但没有模块拥有 `package.json` 之类的工具链文件 | 让宿主模块拥有它 |
 | `IN_MEMORY_VS_TABLE` | 表有 `rowWriters`，但写入模块的散文说「内存表/进程内」 | 二者对齐 |
 | `PAGINATION_MODE_CONFLICT` | 同一路由同时声明 `page` 与 `cursor` 两套分页 | 只留一套 |
@@ -95,6 +96,7 @@
 | `PLAN_TEXT_MOJIBAKE` | warnings.test.mjs |
 | `OPEN_QUESTIONS_PENDING` | warnings.test.mjs |
 | `AC_TEST_UNRUNNABLE` | warnings.test.mjs |
+| `AC_TEST_NODE_FLAG_LATE` | node-flag-late.test.mjs |
 | `AC_TEST_SELECTOR_OVERLAP` | warnings.test.mjs |
 | `QUERY_DEFAULT_UNSTATED` | warnings.test.mjs |
 | `AC_FIELD_UNKNOWN` | warnings.test.mjs |
