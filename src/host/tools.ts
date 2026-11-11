@@ -65,6 +65,8 @@ export interface CheckPayload {
   review?: { round: number; reviewer: string; ready: number; clarify: number; blocked: number; blocking: number; stale: boolean; staleField: 'plan' | 'spec' | '' }
   /** How review verdicts and implementation evidence line up (0.4.4). */
   consistency?: { ok: boolean; reasons: string[] }
+  /** Whether this project can be handed to an implementer (0.4.19). */
+  readiness?: { ok: boolean; reasons: string[] }
 }
 
 const MAX_EVIDENCE = 2048
@@ -524,6 +526,9 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
     ...(review === undefined ? {} : { review }),
     ...(consistency === undefined ? {} : { consistency }),
   }
+  // One call should answer "can I hand this over?" — report has the same summary, but
+  // people run check far more often than report.
+  payload.readiness = distributionReadiness(payload)
   rememberRun(runId, payload, reasons, graphRoot)
   return payload
 }
@@ -663,6 +668,11 @@ function renderCheck(_args: unknown, value: unknown): Array<{ type: 'text'; text
       lines.push(`consistency: ${reasons.length} note(s)`)
       for (const reason of reasons) lines.push(`  - ${reason}`)
     }
+  }
+  if (payload.readiness !== undefined) {
+    const { ok, reasons } = payload.readiness
+    lines.push(ok ? 'readiness: ready to hand over' : `readiness: not ready — ${reasons.length} reason(s)`)
+    for (const reason of ok ? [] : reasons) lines.push(`  - ${reason}`)
   }
   return [{ type: 'text', text: lines.join('\n') }]
 }
@@ -1336,6 +1346,15 @@ const checkOutputSchema = {
       required: ['round', 'reviewer', 'ready', 'clarify', 'blocked', 'blocking', 'stale', 'staleField'],
     },
     consistency: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        ok: { type: 'boolean' },
+        reasons: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['ok', 'reasons'],
+    },
+    readiness: {
       type: 'object',
       additionalProperties: false,
       properties: {
