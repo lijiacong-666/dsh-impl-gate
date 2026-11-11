@@ -352,6 +352,11 @@ export async function runCheck(rawArgs: unknown, deps: ToolDeps): Promise<CheckP
   const config = deps.config
   const implRootArg = typeof args.implRoot === 'string' && args.implRoot.length > 0 ? args.implRoot : ''
   const implRoot = path.resolve(implRootArg.length > 0 ? implRootArg : config.implRoot.length > 0 ? config.implRoot : graphRoot)
+  // An explicitly given implRoot that does not exist used to be treated as "no
+  // evidence yet", which reads like "nothing is implemented". Fail loudly instead.
+  if ((implRootArg.length > 0 || config.implRoot.length > 0) && !fs.existsSync(implRoot)) {
+    return fail('E_ROOT_MISSING', `implRoot does not exist: ${implRoot}`)
+  }
   const slow = args.slow === true || config.slow
 
   let checks: CheckItem[]
