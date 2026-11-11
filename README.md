@@ -28,7 +28,7 @@
 
 ```sh
 # 桌面版把 --profile headless 换成你的 profile（例如 desktop）
-dsh plugin --profile headless add dsh-impl-gate
+dsh plugin --profile <your-profile> add dsh-impl-gate
 ```
 
 然后调用一次（`graphRoot` 换成你的图根）：
@@ -49,9 +49,11 @@ NOT-RUN: B3, B4, B6, M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, Q1, Q2, Q3, Q4, Q5
 <!-- npm:start -->
 
 ### 从 npm 安装（推荐）
+桌面版（DSH 应用）请在「插件」页面安装——桌面 profile 由应用独占，CLI 的 dsh plugin 不能改它；命令行安装请把 <your-profile> 换成你实际用的 profile 名。
+
 
 ```sh
-dsh plugin --profile headless add dsh-impl-gate
+dsh plugin --profile <your-profile> add dsh-impl-gate
 ```
 
 <!-- npm:end -->
@@ -315,7 +317,7 @@ v1 的机械代理分别是：B1 检查 `mapping.md` 覆盖所有「需要」条
 <!-- npm:start -->
 
 ```sh
-dsh plugin --profile headless add dsh-impl-gate@X.Y.Z
+dsh plugin --profile <your-profile> add dsh-impl-gate@X.Y.Z
 ```
 
 <!-- npm:end -->

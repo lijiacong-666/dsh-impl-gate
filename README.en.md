@@ -37,7 +37,7 @@ the loop is a single step.
 
 ```sh
 # desktop app: replace --profile headless with your profile (e.g. desktop)
-dsh plugin --profile headless add dsh-impl-gate
+dsh plugin --profile <your-profile> add dsh-impl-gate
 ```
 
 Then call it once (`graphRoot` = your graph root):
@@ -58,9 +58,11 @@ The payload also carries `passed[]`, `failed[]`, `notRun[]`, `evidence[]` (`{id,
 <!-- npm:start -->
 
 ### From npm (recommended)
+On the desktop app, install from the Plugins page instead: the desktop profile is managed exclusively by the app and dsh plugin cannot touch it. For the CLI, replace <your-profile> with the profile you actually use.
+
 
 ```sh
-dsh plugin --profile headless add dsh-impl-gate
+dsh plugin --profile <your-profile> add dsh-impl-gate
 ```
 
 <!-- npm:end -->
@@ -262,7 +264,7 @@ To update or roll back, name the version, then restart DSH (for 24 hours after a
 <!-- npm:start -->
 
 ```sh
-dsh plugin --profile headless add dsh-impl-gate@X.Y.Z
+dsh plugin --profile <your-profile> add dsh-impl-gate@X.Y.Z
 ```
 
 <!-- npm:end -->
