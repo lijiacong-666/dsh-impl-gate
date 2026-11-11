@@ -450,3 +450,4 @@ impl_gate_record({ outDir: "<outDir>", implRoot: "<代码根>", modules: ["M2"] 
 17. **依赖版本与测试方式不落地**：playbook 只说「Node 22」，fastify 4/5、better-sqlite3 11/12、vitest 还是 `node:test` 全靠猜。→ 在 `globals.conventions` 或 `stack` 里写清版本与测试命令，卡片的 AC 直接引用该命令。
 18. **验收测试用固定参照日**：`const TODAY = '2026-11-10'` 配真实时钟的实现，隔一夜所有「还剩几天」的断言集体偏一天。→ 要么让被测函数接受 `today` 参数并在测试里固定，要么参照日取真实当天（`today()`）再用 UTC 算术做偏移。
 19. **`-t` 选择器写得太短**：`-t "reminder-home"` 会同时命中 `reminder-home-limit`，两个用例共享同一套计数断言就互相污染，AC 也会因为串联失败而变红。→ 选择器写成只有一条用例能命中的名字，并让每条 AC 只对应一条测试。
+20. **用脚本改 plan 时别用 PowerShell 的 \-Encoding ascii\**：中文会被写成 \?\ 落进 plan，渲染成 SPEC 里不可读的乱码。用 Node 的 \s.writeFileSync(file, text, 'utf8')\，或用 write 工具直接落盘；materialize 的 \PLAN_TEXT_MOJIBAKE\ 警告能兜住这种损坏。

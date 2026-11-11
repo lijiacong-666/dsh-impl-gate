@@ -50,6 +50,7 @@ export interface ComposeWarning {
     | 'IN_MEMORY_VS_TABLE'
     | 'TOOLING_UNOWNED'
     | 'AC_STATUS_CONTRADICTION'
+    | 'PLAN_TEXT_MOJIBAKE'
     | 'OPEN_QUESTIONS_PENDING'
     | 'AC_TEST_UNRUNNABLE'
   count: number
@@ -179,6 +180,24 @@ const FILE_PATH_RE = /(?:^|[\s（(，,、])(?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|j
 /** Signals a reviewer must not miss: gaps that validatePlan tolerates on purpose. */
 export function collectWarnings(plan: Plan): ComposeWarning[] {
   const out: ComposeWarning[] = []
+  const garbled: string[] = []
+  const walk = (value: unknown, path: string): void => {
+    if (typeof value === 'string') {
+      if (/\?{3,}|\uFFFD/.test(value)) garbled.push(`${path || '/'}: ${value.slice(0, 60)}`)
+      return
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => walk(item, `${path}/${index}`))
+      return
+    }
+    if (value !== null && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) walk(item, `${path}/${key}`)
+    }
+  }
+  walk(plan, '')
+  if (garbled.length > 0) {
+    out.push({ code: 'PLAN_TEXT_MOJIBAKE', count: garbled.length, items: garbled.slice(0, 10) })
+  }
   const covered = new Set<string>()
   for (const module of plan.modules) {
     for (const item of module.acceptance ?? []) {

@@ -427,3 +427,17 @@ test('QUERY_PARAM_UNMAPPED flags a query parameter the handler type cannot carry
   assert.equal(warning?.count, 1)
   assert.match(warning?.items[0] ?? '', /declares page but UserQuery has no such field/)
 })
+
+test('PLAN_TEXT_MOJIBAKE catches text a script wrote as question marks', () => {
+  const plan = basePlan()
+  assert.ok(!collectWarnings(plan).some((entry) => entry.code === 'PLAN_TEXT_MOJIBAKE'))
+
+  plan.modules[0].constraints.push('listen ??? http://127.0.0.1:<????>')
+  const warning = collectWarnings(plan).find((entry) => entry.code === 'PLAN_TEXT_MOJIBAKE')
+  assert.equal(warning?.count, 1)
+  assert.match(warning?.items[0] ?? '', /^\/modules\/0\/constraints\/\d+: listen \?\?\?/)
+
+  plan.modules[0].constraints.pop()
+  plan.modules[0].responsibility = '负责\uFFFD入库'
+  assert.equal(collectWarnings(plan).find((entry) => entry.code === 'PLAN_TEXT_MOJIBAKE')?.count, 1)
+})
