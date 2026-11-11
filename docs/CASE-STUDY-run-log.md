@@ -83,3 +83,13 @@ impl_gate_check  → PASS 10 / FAIL 0 / NOT-RUN 22
 #    impl_gate_record outDir:"<项目>"
 #    impl_gate_check graphRoot:"<项目>/<图名>" implRoot:"<项目>"
 ```
+
+## 冒烟快照能提前抓到什么（0.4.23）
+
+`pnpm smoke` 会把这四份真实 plan 的输出压成一份快照。run-log 这一份的六条警告里，有三条正是第一次盲审（五轮评分、8/8 判可开工）**完全没有提到**的：
+
+- `STATUS_DEFAULTED`：更新接口没写成功状态码
+- `LIST_ORDER_UNDEFINED`：列表接口没写排序
+- `PATCH_NULLABLE_AMBIGUOUS`：PATCH 的字段全是可空，分不清「不改」和「改成空」
+
+这三条现在既是机检项，也在快照里——如果有人把判定逻辑改窄（比如只认 POST 不认 PUT），单测可能照绿，快照会立刻漂移。反过来说，如果哪天快照里少了这三条，先怀疑检查器退化了，而不是文档变好了。

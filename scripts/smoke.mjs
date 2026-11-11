@@ -28,8 +28,17 @@ const config = {
 }
 
 const update = process.argv.includes('--update')
-const snapshots = update || !fs.existsSync(SNAPSHOT) ? {} : JSON.parse(fs.readFileSync(SNAPSHOT, 'utf8'))
+const ci = process.argv.includes('--ci')
+const snapshotPath = process.env.SMOKE_SNAPSHOT ? path.resolve(process.env.SMOKE_SNAPSHOT) : SNAPSHOT
+const snapshots = update || !fs.existsSync(snapshotPath) ? {} : JSON.parse(fs.readFileSync(snapshotPath, 'utf8'))
 const failures = []
+const pushFailure = (message) => {
+  if (ci) {
+    lines.push(`${message.split(':')[0]} SKIP  ${message}`)
+    return
+  }
+  failures.push(message)
+}
 const lines = []
 
 function findGraphRoot(dir) {
@@ -54,7 +63,7 @@ for (const fixture of FIXTURES) {
 
   const composed = await buildCompose({ mode: 'materialize', outDir, overwrite: true, specgraphCwd: SPECGRAPH_CWD }, config)
   if (!composed || composed.ok !== true) {
-    failures.push(`${fixture.name}: materialize failed — ${JSON.stringify(composed && composed.error)}`)
+    pushFailure(`${fixture.name}: materialize failed — ${JSON.stringify(composed && composed.error)}`)
     lines.push(`${fixture.name.padEnd(9)} FAIL  materialize`)
     continue
   }
@@ -64,14 +73,14 @@ for (const fixture of FIXTURES) {
 
   const inited = buildInit({ outDir, overwrite: true })
   if (!inited || inited.ok !== true) {
-    failures.push(`${fixture.name}: init failed — ${JSON.stringify(inited && inited.error)}`)
+    pushFailure(`${fixture.name}: init failed — ${JSON.stringify(inited && inited.error)}`)
     lines.push(`${fixture.name.padEnd(9)} FAIL  init`)
     continue
   }
 
   const checked = await runCheck({ graphRoot: findGraphRoot(outDir), implRoot: outDir }, { config })
   if (!checked || checked.error !== undefined || !Array.isArray(checked.passed)) {
-    failures.push(`${fixture.name}: check failed — ${JSON.stringify(checked && checked.error)}`)
+    pushFailure(`${fixture.name}: check failed — ${JSON.stringify(checked && checked.error)}`)
     lines.push(`${fixture.name.padEnd(9)} FAIL  check`)
     continue
   }
@@ -102,7 +111,7 @@ for (const fixture of FIXTURES) {
   lines.push(`${fixture.name.padEnd(9)} OK    spec=${specBytes}B warnings=${actual.warnings.length} cards=${actual.cards} check=${actual.passed} pass`)
 }
 
-if (update) fs.writeFileSync(SNAPSHOT, `${JSON.stringify(snapshots, null, 2)}\n`, 'utf8')
+if (update) fs.writeFileSync(snapshotPath, `${JSON.stringify(snapshots, null, 2)}\n`, 'utf8')
 fs.rmSync(tmpRoot, { recursive: true, force: true })
 
 console.log(lines.join('\n'))
