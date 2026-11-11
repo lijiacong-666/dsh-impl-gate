@@ -84,7 +84,7 @@ impl_gate_check  → PASS 10 / FAIL 0 / NOT-RUN 22
 #    impl_gate_check graphRoot:"<项目>/<图名>" implRoot:"<项目>"
 ```
 
-## 冒烟快照能提前抓到什么（0.4.23）
+## 9 冒烟快照能提前抓到什么（0.4.23）
 
 `pnpm smoke` 会把这四份真实 plan 的输出压成一份快照。run-log 这一份的六条警告里，有三条正是第一次盲审（五轮评分、8/8 判可开工）**完全没有提到**的：
 
