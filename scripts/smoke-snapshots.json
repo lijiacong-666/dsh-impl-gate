@@ -1,0 +1,52 @@
+{
+  "mini": {
+    "warnings": [
+      "COVERAGE_GAP",
+      "BOUNDARY_UNUSED",
+      "IN_MEMORY_VS_TABLE",
+      "HTTP_ROUTE_UNCOVERED",
+      "HTTP_NO_HOST",
+      "HTTP_RES_MISMATCH",
+      "TOOLING_UNOWNED"
+    ],
+    "cards": 1,
+    "passed": 10,
+    "failed": 0
+  },
+  "fitness": {
+    "warnings": [
+      "STATUS_DEFAULTED",
+      "LIST_ORDER_UNDEFINED",
+      "LIST_PAGINATION_UNDECLARED",
+      "PATCH_NULLABLE_AMBIGUOUS",
+      "TYPE_OWNER_MISSING",
+      "AC_STATUS_CONTRADICTION",
+      "OPEN_QUESTIONS_PENDING"
+    ],
+    "cards": 8,
+    "passed": 10,
+    "failed": 0
+  },
+  "pillbox": {
+    "warnings": [
+      "OPEN_QUESTIONS_PENDING",
+      "AC_TEST_SELECTOR_OVERLAP"
+    ],
+    "cards": 9,
+    "passed": 10,
+    "failed": 0
+  },
+  "run-log": {
+    "warnings": [
+      "STATUS_DEFAULTED",
+      "LIST_ORDER_UNDEFINED",
+      "PATCH_NULLABLE_AMBIGUOUS",
+      "AC_AUTH_UNSTATED",
+      "HTTP_ROUTE_UNCOVERED",
+      "OPEN_QUESTIONS_PENDING"
+    ],
+    "cards": 7,
+    "passed": 10,
+    "failed": 0
+  }
+}
