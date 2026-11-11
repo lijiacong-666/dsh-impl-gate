@@ -24,6 +24,15 @@ Turns the 32 IMPL-GATE assertions into three callable DSH tools: give it a spec-
 
 > **The engine ships with the plugin (0.4.45+).** Every materialize and check calls python -m specgraph, and the npm package now bundles a pinned copy under engine/specgraph/ — a fresh install only needs Python >= 3.11. A local spec-graph checkout still wins; the A1 evidence records specgraph_home=. See [docs/install-specgraph.md](docs/install-specgraph.md).
 
+## What "one requirement" actually means
+
+The tool does not turn a sentence into a finished design by itself. You (or a model) write
+`compose-plan.json` — goals, boundaries, modules, types, errors, routes, acceptance rows — and
+`impl_gate_compose` validates it, materializes the contract graph and renders `SPEC.md`. A
+one-sentence input is the start of a loop: fill the plan, run an independent review, then record
+implementation evidence. `playbooks/compose.md` spells out that loop; the README does not claim
+the loop is a single step.
+
 ## Minimal example
 
 ```sh

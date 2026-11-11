@@ -10,7 +10,7 @@
 
 ## 这是什么
 
-> 第一次用？直接看 [五分钟上手](docs/QUICKSTART.md)：一句需求 → SPEC → 评审 → 任务卡 → 证据。
+> 第一次用？直接看 [五分钟上手](docs/QUICKSTART.md)：先写 plan（模型填内容），工具校验后出 SPEC → 独立评审 → 任务卡 → 实现证据。
 
 - **调用而非重写**：每次检查都 spawn `python -m specgraph check --json`，图的问题按原样返回（`graphIssues` + `graphExitCode`）。
 - **32 条逐条裁决**：A（交付物）、B（实现边界）、M（模块/导入）、Q（质量）四组，每条产出 `status` + `evidence`（≤2 KB）；判不了的写 NOT-RUN，不猜。
