@@ -904,12 +904,17 @@ export const REVIEW_RUBRIC = ['可开工', '需澄清', '不可开工']
  * the SPEC.md a reviewer reads. `playbooks/` ships beside `lib/` in the repo
  * and in an installed package, so the same resolve works in both.
  */
-export function composeReview(outDir: string): ComposeReview {
+export function composeReview(outDir: string, specFile = 'SPEC.md'): ComposeReview {
   const root = path.resolve(outDir)
-  const specPath = path.join(root, 'SPEC.md')
+  const specPath = path.join(root, specFile)
+  const draft = specFile !== 'SPEC.md'
   const prompt = [
-    `你是这份设计文档的独立评审者。只读 ${specPath}，不要读 compose-plan.json、tasks/ 或任何实现代码——那些会替文档回答它没写的东西。`,
-    '对每一个模块给三态判定：可开工 / 需澄清 / 不可开工。判定标准：可开工 = 实施者不用再问任何人就能动手；需澄清 = 开工会上问一句即可；不可开工 = 照文档写不出来。',
+    draft
+      ? `这是还没有物化的草稿 ${specPath}（不是 SPEC.md）。只读它，不要读 compose-plan.json、tasks/ 或任何实现代码。`
+      : `你是这份设计文档的独立评审者。只读 ${specPath}，不要读 compose-plan.json、tasks/ 或任何实现代码——那些会替文档回答它没写的东西。`,
+    draft
+      ? '草稿阶段不做「可开工/不可开工」判定：逐节列出空着、写着「待定」或与其它节互相矛盾的地方，每条给出你希望补上的最小信息，并标出所在行号。'
+      : '对每一个模块给三态判定：可开工 / 需澄清 / 不可开工。判定标准：可开工 = 实施者不用再问任何人就能动手；需澄清 = 开工会上问一句即可；不可开工 = 照文档写不出来。',
     '「需澄清」「不可开工」必须写清缺什么；证据一律写成 SPEC.md:<行号>，不要写「第 3 节」这类模糊位置。',
     '重点查自相矛盾与留白：同一概念是否只有一个名字；声明必填的字段在 AC 里是否真传；成功状态码、排序、缺省值、时区是否写死；散文与类型表、http 表是否对得上。',
     '再逐条过一遍「沉默清单」——这些机器查不出、只能靠你读出来，命中就写进「需澄清」并给行号：',
@@ -926,7 +931,9 @@ export function composeReview(outDir: string): ComposeReview {
     '11. 每个页面/视图的数据从哪个接口来？空态与错误态显示什么？',
     '12. 框架/运行时版本、测试命令与运行方式（vitest / node:test）落字了吗？',
     '通过线是 blocked = 0 且 blocking = 0（不要求 100% 可开工）；每轮只核上一轮的 blocking 是否清零，外加有没有新引入的矛盾。',
-    `把判定写回：调用 impl_gate_review，outDir = ${root}，reviewer 写你的标识并注明「只读 SPEC.md」。`,
+    draft
+      ? '把缺口清单直接回给写 plan 的人；草稿阶段不调用 impl_gate_review，等 materialize 产出 SPEC.md 之后再评审。'
+      : `把判定写回：调用 impl_gate_review，outDir = ${root}，reviewer 写你的标识并注明「只读 SPEC.md」。`,
   ].join('\n')
   return {
     playbook: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'playbooks', 'review.md'),
@@ -1036,7 +1043,7 @@ export async function buildCompose(rawArgs: unknown, config: PluginConfig): Prom
       draftPath,
       missingSlots: missingSlots(source),
       problems: [],
-      review: composeReview(outDir),
+      review: composeReview(outDir, 'SPEC-DRAFT.md'),
     }
   }
 
